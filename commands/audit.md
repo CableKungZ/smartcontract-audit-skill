@@ -1,6 +1,6 @@
 ---
-description: Security audit of a Solidity contract or directory. hard (default) = full audit + HTML report; quick = cheap triage list
-argument-hint: <path-to-contract-or-dir> [quick|hard] [chain] [type]
+description: Security audit of a Solidity contract or directory. hard (default) = full audit + HTML report; quick = cheap triage list; reaudit <prev.json> = verify fixes and re-run
+argument-hint: <path-to-contract-or-dir> [quick|hard|reaudit <prev.json>] [address] [chain]
 allowed-tools: Read, Grep, Glob, Bash, Write, Edit
 model: opus
 effort: high
@@ -17,9 +17,10 @@ single finding before step 4 is done.
 
 ## 0. Mode
 
-`$ARGUMENTS` may contain `quick` or `hard`.
+`$ARGUMENTS` may contain `quick`, `hard`, or `reaudit <previous.findings.json>`.
 
-**If the user did not say which, ask before doing anything** — one
+If a previous `findings.json` was supplied, the mode is **reaudit** — do not
+ask. Otherwise: **if the user did not say which, ask before doing anything** — one
 `AskUserQuestion` call, and do not start the scan until it is answered. Never
 pick the mode silently: quick costs a third as much and hard is the only one
 that produces a report, so the choice changes both the bill and the deliverable.
@@ -45,6 +46,13 @@ If the user *did* name a mode, run it without asking, and still ask Yes/No for
 any optional step above that applies.
 
 - **hard** — everything in this file, all seven passes, HTML report.
+- **reaudit** — the user gave a previous `findings.json`. For each old finding,
+  verify the fix in the code and set its status: `Fixed` (name the commit and
+  line), `Open` (say why the fix is incomplete — the most valuable output of a
+  re-audit), or `Acknowledged`. Then run the full hard passes over the changed
+  code, because fixes introduce findings. Generate with
+  `--previous prev.findings.json`, which renders the remediation-status table
+  and marks anything new.
 - **quick** — triage. Run step 1, load only `methodology.md`, `postmortems.md`
   and the type catalogs `scan.py` actually points at, read only the lines it
   flags, and stop after step 4 with a **ranked markdown list in the terminal**:
@@ -85,6 +93,12 @@ Never ship an Unverified entry.
 ## 2. Load the catalogs
 
 Read from `SKILL_DIR/references/`.
+
+If an on-chain **address** was given, also load `onchain.md` and run its
+`cast` checks — deployed bytecode vs the audited source, the real proxy
+implementation and admin, real role holders, configured parameters, messaging
+config, and the block height everything was read at. If no address was given,
+write one sentence in Scope: source only, on-chain state not verified.
 
 **Type comes from the identifiers, not the file name.** Use the `CONTRACT TYPE`
 section of the `scan.py` output from step 1: load every catalog it lists, and
@@ -198,6 +212,9 @@ highlight the exact lines.
 ```
 python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py --validate findings.json
 python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py findings.json report.html
+
+# reaudit mode only
+python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py     --previous prev.findings.json findings.json report.html
 ```
 
 End the report with the sequenced remediation stages from `economics.md` §5 —

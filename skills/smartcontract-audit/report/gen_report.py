@@ -2,6 +2,7 @@
 """Render an audit findings JSON into a single self-contained HTML report.
 
     python report/gen_report.py findings.json report.html
+    python report/gen_report.py --previous prev.findings.json new.json report.html
 
 findings.json shape (everything except `findings` is optional):
 
@@ -335,7 +336,43 @@ def finding_html(f):
     return "".join(parts)
 
 
-def build(d):
+def remediation_html(previous, findings):
+    """Re-audit table: every previous finding, and what happened to it.
+
+    `previous` is the earlier findings.json. A previous finding that is absent
+    from the new run is reported as such rather than dropped -- silence about a
+    finding that was raised once is the failure mode this table exists to stop.
+    """
+    now = {str(f.get("id")): f for f in findings}
+    rows = []
+    for p in previous.get("findings", []):
+        pid = str(p.get("id", ""))
+        cur = now.get(pid)
+        if cur is None:
+            then, status, cls = p.get("severity", "?"), "Not re-reported", "info"
+        else:
+            then = p.get("severity", "?")
+            status = str(cur.get("status", "Open"))
+            cls = SEV_KEY.get(cur.get("severity"), "info")
+        rows.append(
+            f'<tr><td><a href="#{html.escape(pid)}">{html.escape(pid)}</a></td>'
+            f'<td>{inline(p.get("title", ""))}</td>'
+            f'<td>{html.escape(str(then))}</td>'
+            f'<td class="{cls}"><span class="pill">{html.escape(status)}</span></td></tr>')
+    new_ids = [str(f.get("id")) for f in findings
+               if str(f.get("id")) not in {str(p.get("id")) for p in previous.get("findings", [])}]
+    out = ("<table><thead><tr><th>ID</th><th>Finding</th><th>Was</th>"
+           f"<th>Now</th></tr></thead><tbody>{''.join(rows)}</tbody></table>")
+    if new_ids:
+        links = ", ".join(f'<a href="#{html.escape(i)}">{html.escape(i)}</a>'
+                          for i in new_ids)
+        out += (f'<p class="rv"><strong>New in this round:</strong> {links} — '
+                f"introduced by the remediation, or missed the first time. Say "
+                f"which.</p>")
+    return out
+
+
+def build(d, previous=None):
     findings = sorted(
         d.get("findings", []),
         key=lambda f: (SEVERITIES.index(f.get("severity", "Informational"))
@@ -371,6 +408,9 @@ def build(d):
                  "".join(f"<li><code>{html.escape(str(x))}</code></li>" for x in d["scope"]) + "</ul>")
     if d.get("summary"):
         s.append("<h2>Executive summary</h2>" + md(d["summary"]))
+    if previous:
+        s.append("<h2>Remediation status (re-audit)</h2>"
+                 + remediation_html(previous, findings))
     s.append(f'<h2>Findings by severity</h2><div class="tally">{tally}</div>')
     if rows:
         s.append("<h2>Summary of findings</h2><table><thead><tr><th>ID</th><th>Title</th>"
@@ -458,6 +498,12 @@ SEV_PREFIX = {"Critical": "C", "High": "H", "Medium": "M",
 
 def main(argv):
     check_only = "--validate" in argv
+    previous = None
+    if "--previous" in argv:
+        i = argv.index("--previous")
+        with open(argv[i + 1], encoding="utf-8") as fh:
+            previous = json.load(fh)
+        del argv[i:i + 2]
     argv = [a for a in argv if a != "--validate"]
     if len(argv) != (2 if check_only else 3):
         sys.exit(__doc__)
@@ -477,7 +523,7 @@ def main(argv):
         return
 
     with open(argv[2], "w", encoding="utf-8") as fh:
-        fh.write(build(data))
+        fh.write(build(data, previous))
     print(f"wrote {argv[2]} ({len(data.get('findings', []))} findings, "
           f"{len(warns)} warning(s))")
 
@@ -515,6 +561,18 @@ def _selftest():
     pd = poc_block({"file": "test/P.t.sol", "command": "forge test --mt x",
                     "output": "line1\nline2"})
     assert "forge test --mt x" in pd and pd.count("class=\"ln\"") == 2, pd
+
+    # re-audit: previous findings keep their row, one Fixed, one gone, one new
+    prev = {"findings": [{"id": "C-01", "title": "old crit", "severity": "Critical"},
+                         {"id": "H-01", "title": "gone", "severity": "High"}]}
+    now = [{"id": "C-01", "title": "old crit", "severity": "Critical",
+            "status": "Fixed"},
+           {"id": "M-09", "title": "new one", "severity": "Medium"}]
+    rem = remediation_html(prev, now)
+    assert "Fixed" in rem and "Not re-reported" in rem, rem
+    assert "New in this round" in rem and "M-09" in rem, rem
+    doc3 = build({"project": "p", "summary": "s", "findings": now}, prev)
+    assert "Remediation status" in doc3
 
     doc2 = build({"project": "p", "findings": [],
                   "sections": [{"title": "Stranded <x>", "body": "**b**",

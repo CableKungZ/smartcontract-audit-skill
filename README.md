@@ -22,7 +22,7 @@ report showing the vulnerable code in red and the fix in green.**
 Point it at a Solidity contract and it runs a structured audit: recon → catalog
 walk → concrete exploit scenarios → severity classification → HTML report.
 
-- **14 vulnerability catalogs**, one per contract type, each with real incidents
+- **15 vulnerability catalogs**, one per contract type, each with real incidents
   and the exact code pattern to look for.
 - **Mandatory arithmetic & liveness pass** — narrowing casts that truncate
   silently in Solidity 0.8, accumulators that overflow their type, and every way
@@ -40,6 +40,13 @@ walk → concrete exploit scenarios → severity classification → HTML report.
 - **Value accounting** — where every unit of value ends up, whether pricing
   parameters are per-item or global-mutable, and whether capital is placed
   somewhere participants can never reach it.
+- **Compiler and library versions checked** — every pragma against the solc
+  team's own bug list (vendored offline) and every pinned OpenZeppelin version
+  against its advisories. A floating pragma is itself a finding: the bytecode
+  you audited is not provably the bytecode that shipped.
+- **On-chain state, not just source** — for a deployed address: bytecode vs the
+  audited source, the real proxy implementation and admin, the real role holders
+  behind every privileged function, and the configured parameters.
 - **Proof or it didn't happen** — every Critical and High ships with a runnable
   Foundry PoC (command + real output) or a stated waiver; the report generator
   refuses to build without one. Plus a five-question self-review pass that
@@ -137,7 +144,8 @@ privilege required — the full rubric is in
 | **Every audit** | [`gas.md`](skills/smartcontract-audit/references/gas.md) | unbounded loops, gas griefing, optimization |
 | **Every audit** | [`methodology.md`](skills/smartcontract-audit/references/methodology.md) | severity rubric, general EVM catalog, self-review pass, per-chain notes |
 | **Every audit** | [`postmortems.md`](skills/smartcontract-audit/references/postmortems.md) | checks derived from real 2024-2026 exploits: paired-rounding, wrong overflow checks, donation on fresh markets, cross-chain verifier config, uninitialized proxies, EIP-7702 |
-| Reference | [`examples.md`](skills/smartcontract-audit/references/examples.md) | upstreams to diff forks against, libraries, security corpora |
+| Already deployed | [`onchain.md`](skills/smartcontract-audit/references/onchain.md) | `cast` cookbook: bytecode vs source, real proxy impl/admin, real role holders, configured params, messaging config |
+| Reference | [`examples.md`](skills/smartcontract-audit/references/examples.md) | upstreams to diff forks against, libraries, OpenZeppelin advisory versions, security corpora |
 | KUB Chain | [`kub.md`](skills/smartcontract-audit/references/kub.md) | KAP-20/721/1155/22, `adminTransfer`, KYC gating, chain notes |
 
 ## KUB Chain / Bitkub
@@ -167,7 +175,8 @@ Source: [docs.kubchain.com](https://docs.kubchain.com/quickstart/launching-a-tok
 | `scripts/slither_to_findings.py` | Converts `slither --json` into draft findings, mapped one severity level *below* what Slither claims, every entry `Unverified` until a human confirms it. |
 | `scripts/linkcheck.py` | Verifies every reference URL still resolves — a report citing a 404 is a report the reader stops trusting. Exit code = dead links, so it drops into CI. |
 | `report/gen_report.py` | `findings.json` → self-contained HTML. `--validate` checks schema, duplicate ids, severity/id-prefix mismatch, leftover `Unverified`, `TODO` recommendations, missing summary or trust assumptions, and **errors** on a Critical/High with no runnable PoC and no waiver. |
-| `/audit <path> [quick\|hard]` | `hard` (default) runs the whole workflow end to end and writes the HTML report. `quick` is triage: recon + the catalogs `scan.py` points at, a ranked list in the terminal, labelled as not-an-audit. |
+| `/audit <path> [quick\|hard\|reaudit <prev.json>]` | `hard` (default) runs the whole workflow end to end and writes the HTML report. `quick` is triage: recon + the catalogs `scan.py` points at, a ranked list in the terminal, labelled as not-an-audit. `reaudit` verifies each previous finding's fix and re-runs the passes over the changed code. |
+| `scripts/solc_bugs.py` | The solc team's own bug list, vendored offline. `solc_bugs.py '^0.8.13'` prints what can bite that pragma; `--update` refreshes the data. `scan.py` calls it for every file. |
 | `/audit-report [json] [html]` | Validates and regenerates the report. |
 
 Every script is stdlib-only and has a `--selftest`:
@@ -246,12 +255,14 @@ skills/smartcontract-audit/
     custody.md                  deposit/withdraw, escrow, wrapped receipts
     kub.md                      KAP standards, KUB chain notes
     postmortems.md              checks derived from real 2024-2026 exploits
+    onchain.md                  cast cookbook for deployed contracts
     examples.md                 upstreams, libraries, OZ advisory versions
   report/
     gen_report.py               JSON -> HTML, plus --validate
     example.findings.json       filled-in sample, 7 findings
   scripts/
     scan.py                     recon pass
+    solc_bugs.py + .json        solc bug list per pragma (vendored, offline)
     slither_to_findings.py      Slither import
     linkcheck.py                reference-URL checker
 ```

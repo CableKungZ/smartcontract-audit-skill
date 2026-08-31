@@ -11,6 +11,7 @@ every hit still has to be read in context. It finds nothing on its own.
 Sections printed:
   files       loc, pragma, licence, imports (which library + version pinned?)
   surface     external/public functions, their modifiers, payable, view
+  compiler    every pragma against the solc team's own bug list (offline)
   tests       the project's own harness: unit / fuzz / invariant counts
   type        which catalogs to load, inferred from identifiers in the code,
               plus a name-vs-body check (a file called Token.sol that stakes)
@@ -260,6 +261,33 @@ def collect(target):
     return out
 
 
+def compiler_section(w, results):
+    """Every pragma against the solc team's own bug list (offline, vendored)."""
+    w("\n=== COMPILER (pragma vs known solc bugs) ===\n")
+    try:
+        import solc_bugs
+        data = solc_bugs.load()
+    except Exception as e:                       # missing/stale vendored data
+        w(f"  solc bug data unavailable ({e}) -- run scripts/solc_bugs.py"
+          f" --update\n")
+        return
+    seen = {}
+    for r in results:
+        seen.setdefault((r["pragma"] or "MISSING").strip(), []).append(r["file"])
+    for pragma, files in sorted(seen.items()):
+        w(f"\n  pragma {pragma}\n")
+        for f in files:
+            w(f"      {f}\n")
+        if pragma == "MISSING":
+            w("      no pragma at all -- the compiler version is whatever the"
+              " deployer chose\n")
+            continue
+        for line in solc_bugs.describe(pragma, data) or ["no known bugs"]:
+            w(f"      - {line}\n")
+    w(f"\n  data generated {data['generated']}; refresh with"
+      f" scripts/solc_bugs.py --update\n")
+
+
 TEST_MARKERS = ("foundry.toml", "hardhat.config.js", "hardhat.config.ts",
                 "truffle-config.js", "remappings.txt", "package.json")
 
@@ -438,6 +466,7 @@ def report(results, tests=None):
             w(f"  {r['file']}: lines " +
               ", ".join(str(x) for x in r["division_lines"]) + "\n")
 
+    compiler_section(w, results)
     tests_section(w, tests)
 
     w("\nNext: read the code. This scan proves nothing.\n\n")

@@ -112,6 +112,27 @@ answered): a centralization finding that requires a privileged key, a repo with
 no test harness at all (say so, and recommend one), or a precondition that is
 genuinely off-chain. "It was obvious from reading" is not a waiver.
 
+## Compiler version
+
+The compiler is a dependency like any other, and it has a published bug list.
+`scripts/scan.py` prints every pragma against it (`solc_bugs.py`, vendored
+offline; refresh with `--update`).
+
+- **A floating pragma is a finding.** `^0.8.13` compiles with anything up to
+  0.8.x-latest, so the bytecode you read is not provably the bytecode that
+  shipped. **Low** on its own; **Medium** when the range spans a version with a
+  medium/high bug the code can actually trigger. Recommend pinning one exact
+  version, and record the version the deployed bytecode was built with.
+- **Match the bug to the code before filing it.** `InlineAssemblyMemorySideEffects`
+  only matters if there is inline assembly; `AbiReencodingHeadOverflow...` only
+  if a tuple with a static calldata array gets re-encoded. A bug in range that
+  the code cannot reach is Informational, and say why it cannot reach it.
+- **Below 0.8.0 there are no overflow checks.** Every arithmetic finding gets
+  more severe, and the absence of SafeMath on any operation is itself the bug.
+- The audit's method section states the exact `solc` version used, the optimizer
+  setting and runs, and whether the audited source matches the verified source
+  on the explorer.
+
 ## Quantify economic claims
 
 Never write "some value is stranded" or "the operator takes a large share".

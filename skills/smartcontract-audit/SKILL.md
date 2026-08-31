@@ -6,14 +6,16 @@ description: >
   self-contained HTML report with red "vulnerable code" / green "recommended fix"
   blocks, impact analysis and concrete remediation.
   Use when the user asks to audit, security-review, or find vulnerabilities in a
-  Solidity/Vyper contract. Shared methodology plus per-contract-type catalogs
+  Solidity contract (Vyper: catalogs apply, tooling does not - see below).
+  Shared methodology plus per-contract-type catalogs
   (staking, token, lending, defi, swap, liquidity, wallet, launchpad/governance,
   and custody: deposit/withdraw, escrow, and wrapped 1:1 receipt tokens such as
   WETH or KKUB where no mint path may exist besides depositing the underlying),
   mandatory arithmetic/overflow/liveness, loop & gas, and custody passes, an
-  incident-replay pass derived from real 2024-2026 exploits, a Quick triage mode
-  and a full Hard audit mode, a check of the
-  pinned OpenZeppelin version against known advisories, reference
+  incident-replay pass derived from real 2024-2026 exploits, Quick / Hard /
+  Reaudit modes, a runnable-PoC requirement on every Critical and High, checks of
+  the pinned OpenZeppelin and solc versions against known advisories, an
+  on-chain state pass for deployed contracts, reference
   implementations to diff forks against, and chain-specific notes including
   KUB Chain / KAP standards.
 model: opus
@@ -23,9 +25,17 @@ license: MIT
 
 # Smart Contract Audit
 
-## Two modes: Quick and Hard
+## Modes: Quick, Hard, Reaudit
 
 Pick one **before** loading anything, and say which one you ran in the report.
+
+A third mode, **Reaudit**, runs when the user supplies a previous
+`findings.json`: verify each old finding at code level and set its status
+(`Fixed` with the commit and line, `Open` with why the fix is incomplete, or
+`Acknowledged`), then run the full Hard passes over the **changed** code —
+fixes introduce findings, which is why Uranium is in `examples.md`. Generate
+with `--previous`, which renders the remediation-status table above the
+findings and marks anything new.
 
 | | **Quick** (triage) | **Hard** (audit — the default) |
 |---|---|---|
@@ -102,6 +112,15 @@ loop with its bound, every narrowing cast, every division, and every
 risk-pattern hit with a pointer to the relevant catalog. **It proves nothing** —
 it tells you which lines to read.
 
+It also prints three things that are findings in their own right: the
+**CONTRACT TYPE** inference with its name-vs-body check (step 1), the
+**COMPILER** section — every pragma against the solc team's own bug list, where
+a floating pragma is itself a finding (`methodology.md`) — and the **TESTS**
+section, whose invariant/fuzz counts belong in the report's method section.
+The solc data is vendored; refresh it with `python scripts/solc_bugs.py
+--update`, and query one pragma directly with `python scripts/solc_bugs.py
+'^0.8.13'`.
+
 If `slither` is available:
 
 ```
@@ -148,6 +167,7 @@ farm is staking + token; a vault is liquidity + defi).
 | Launchpad/IDO, governance/DAO, airdrop/merkle, NFT marketplace | `references/misc.md` |
 | Any protocol that distributes value — launchpad, curve sale, fee split, settlement | `references/economics.md` |
 | **Anything deployed on KUB Chain / Bitkub** | `references/kub.md` (**always**, on top of the type catalog) |
+| **Anything already deployed** (an address was given) | `references/onchain.md` (**always** — source is not state) |
 
 **Always load, regardless of type:**
 - `references/methodology.md` — severity rubric, general EVM catalog, chain table.
@@ -157,6 +177,16 @@ farm is staking + token; a vault is liquidity + defi).
 - `references/postmortems.md` — checks derived from real 2024–2026 incidents
   (rounding inconsistency, a wrong overflow *check*, donation on a fresh market,
   cross-chain verifier config, uninitialized proxies, EIP-7702, expiring pauses).
+
+**Vyper contracts.** Every catalog here applies — the vulnerability classes are
+language-independent — but the tooling is not: `scan.py`, `slither_to_findings.py`
+and the identifier/type inference are Solidity-only, and `.vy` files are not
+collected. Audit Vyper by hand against the same catalogs, state in Scope that
+the recon pass did not run, and pay attention to the two places Vyper differs:
+its `@nonreentrant` locks are per-key and were themselves broken in 0.2.15–0.3.0
+(Curve, 2023, ~$70M — `swap.md`), and `raw_call` forwards all gas by default.
+Check the Vyper release notes for the pinned version the same way `examples.md`
+checks OpenZeppelin's.
 
 **If the contract is a fork**, find its upstream in `references/examples.md` and
 diff it line by line *before* anything else. Uranium Finance lost $50M to one
@@ -246,6 +276,9 @@ Then run **the self-review pass** — the five questions in
 ```
 python report/gen_report.py --validate findings.json   # fix every warning
 python report/gen_report.py findings.json report.html
+
+# re-audit: previous findings become a remediation-status table
+python report/gen_report.py --previous prev.findings.json findings.json report.html
 ```
 
 Shape is documented at the top of `report/gen_report.py`;

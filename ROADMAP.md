@@ -4,11 +4,19 @@ Written 2026-09-01, after the `postmortems.md` / quick-hard / type-inference
 work landed in `5fb4361`. Each item is self-contained: a cold session can pick
 one, read the named files, and ship it without re-deriving the analysis.
 
-**Items 1, 4 and 7 shipped on 2026-09-01** — the PoC gate (`poc` / `poc_waiver`
+**ALL SEVEN ITEMS SHIPPED (2026-09-01).** Items 1, 4, 7 landed first — the PoC gate (`poc` / `poc_waiver`
 fields, a hard validator error on an unproven Critical/High), the five-question
 self-review pass (`review_note`, `methodology.md`), and the `TESTS` section in
-`scan.py`. Their sections below are kept as the record of what was built; the
-remaining work is items **2, 3, 5, 6**.
+`scan.py`. Then 2, 3, 5, 6: the solc bug check (`scripts/solc_bugs.py` + vendored
+`solc_bugs.json`, a `COMPILER` section in `scan.py`), on-chain state
+verification (`references/onchain.md`), the Vyper claim corrected to match the
+tooling, and reaudit mode (`gen_report.py --previous`). The sections below are
+kept as the record of what was built and why.
+
+**What would come next, if anything:** full Vyper tooling (item 5's "full" path
+— `.vy` parsing in `scan.py` plus a `vyper.md` catalog) is the only item
+deliberately left undone; it is a decision, not a gap. Everything else here is
+in the code.
 
 Ordered by value. **Do 1 and 2 first** — they are the two that change report
 quality, not just report surface.
@@ -57,7 +65,7 @@ to its Critical entry), `SKILL.md`, `commands/audit.md`,
 
 ---
 
-## 2. solc version bug check
+## 2. solc version bug check — DONE (2026-09-01)
 
 **Why.** We now check the pinned OpenZeppelin version against advisories
 (`references/examples.md`) but the compiler gets a free pass — `scan.py` prints
@@ -102,7 +110,7 @@ with no network.
 
 ---
 
-## 3. On-chain state verification for deployed contracts
+## 3. On-chain state verification for deployed contracts — DONE (2026-09-01)
 
 **Why.** The audit reads source; the risk lives on-chain. Who *actually* holds
 `owner` today, what the proxy admin is, whether the deployed bytecode matches
@@ -164,7 +172,7 @@ renders `review_note` when present.
 
 ---
 
-## 5. Vyper: support it or stop claiming it
+## 5. Vyper: support it or stop claiming it — DONE (2026-09-01)
 
 **Why.** `SKILL.md`'s description says "Solidity/Vyper" but `scan.py` is
 Solidity-only regex, no `.vy` is ever collected, and no catalog covers Vyper
@@ -192,7 +200,7 @@ Full: adds `scripts/scan.py`, `references/vyper.md`.
 
 ---
 
-## 6. Re-audit mode
+## 6. Re-audit mode — DONE (2026-09-01)
 
 **Why.** `findings.json` already has `status: Fixed | Acknowledged | Disputed`
 and nothing in the workflow ever produces it. Clients re-audit after
@@ -253,6 +261,8 @@ report template asks for the paragraph.
 ---
 
 ## Suggested sequencing
+
+All items below are complete. Original sequencing kept for the record.
 
 | Order | Item | Rough size |
 |---|---|---|
