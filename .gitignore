@@ -1,0 +1,11 @@
+# audit working files — never commit a client's findings or report
+findings.json
+draft.findings.json
+slither.json
+report.html
+*.report.html
+recon.json
+
+__pycache__/
+*.pyc
+.DS_Store
