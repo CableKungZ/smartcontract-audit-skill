@@ -1,0 +1,21 @@
+{
+  "name": "smartcontract-audit",
+  "description": "Audit EVM smart contracts — severity-classified findings, arithmetic & liveness checks, and a self-contained HTML report with red/green code fixes. EVM + KUB Chain.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": {
+    "name": "CableKungZ",
+    "url": "https://github.com/CableKungZ"
+  },
+  "homepage": "https://github.com/CableKungZ/smartcontract-audit-skill",
+  "repository": "https://github.com/CableKungZ/smartcontract-audit-skill",
+  "keywords": [
+    "solidity",
+    "smart-contracts",
+    "security",
+    "audit",
+    "evm",
+    "defi",
+    "kub-chain"
+  ]
+}

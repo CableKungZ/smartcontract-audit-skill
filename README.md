@@ -36,26 +36,40 @@ walk → concrete exploit scenarios → severity classification → HTML report.
 - **HTML report** — one file, no assets, no network, light/dark aware, prints to
   PDF, with the vulnerable code in red and the recommended fix in green.
 
+## Install
+
+This repo is both a Claude Code **plugin marketplace** and the plugin itself:
+
+```bash
+/plugin marketplace add CableKungZ/smartcontract-audit-skill
+/plugin install smartcontract-audit@cablekungz-skills
+```
+
+Then run `/smartcontract-audit:audit contracts/Staking.sol`, or just ask —
+*"audit this staking contract for KUB Chain"* — the skill triggers on its own.
+
+To hack on it locally instead, clone it and
+`/plugin marketplace add ./smartcontract-audit-skill`.
+
 ## Quick start
 
 ```bash
+S=skills/smartcontract-audit
+
 # 1. Recon: external surface, loops, casts, divisions, risk patterns
-python scripts/scan.py contracts/
+python $S/scripts/scan.py contracts/
 
 # 2. (optional) Import Slither as a draft — every entry lands "Unverified"
 slither contracts/ --json slither.json
-python scripts/slither_to_findings.py slither.json > draft.findings.json
+python $S/scripts/slither_to_findings.py slither.json > draft.findings.json
 
 # 3. Audit (in Claude Code)
 /audit contracts/Staking.sol
 
 # 4. Report
-python report/gen_report.py --validate findings.json   # fix every warning
-python report/gen_report.py findings.json report.html
+python $S/report/gen_report.py --validate findings.json   # fix every warning
+python $S/report/gen_report.py findings.json report.html
 ```
-
-Or just ask: *"audit this staking contract for KUB Chain"* — the skill
-description triggers on its own.
 
 ## The report
 
@@ -141,9 +155,10 @@ Source: [docs.kubchain.com](https://docs.kubchain.com/quickstart/launching-a-tok
 Every script is stdlib-only and has a `--selftest`:
 
 ```bash
-python scripts/scan.py --selftest
-python scripts/slither_to_findings.py --selftest
-python report/gen_report.py --selftest
+S=skills/smartcontract-audit
+python $S/scripts/scan.py --selftest
+python $S/scripts/slither_to_findings.py --selftest
+python $S/report/gen_report.py --selftest
 ```
 
 ## `findings.json`
@@ -184,24 +199,27 @@ neither is required for anything here to run.
 ## Layout
 
 ```
-SKILL.md                        the workflow Claude follows
-README.md
-references/
-  methodology.md                severity rubric, EVM catalog, per-chain notes
-  arithmetic.md                 overflow, casts, precision, contract bricking
-  gas.md                        loops, gas griefing, optimization
-  staking.md  token.md  lending.md  defi.md
-  swap.md  liquidity.md  wallet.md  misc.md
-  kub.md                        KAP standards, KUB chain notes
-  examples.md                   upstreams, libraries, security corpora
-report/
-  gen_report.py                 JSON -> HTML, plus --validate
-  example.findings.json         filled-in sample, 7 findings
-scripts/
-  scan.py                       recon pass
-  slither_to_findings.py        Slither import
-.claude/commands/
+.claude-plugin/
+  marketplace.json              makes this repo an installable marketplace
+  plugin.json                   plugin manifest
+commands/
   audit.md  audit-report.md     slash commands
+skills/smartcontract-audit/
+  SKILL.md                      the workflow Claude follows
+  references/
+    methodology.md              severity rubric, EVM catalog, per-chain notes
+    arithmetic.md               overflow, casts, precision, contract bricking
+    gas.md                      loops, gas griefing, optimization
+    staking.md  token.md  lending.md  defi.md
+    swap.md  liquidity.md  wallet.md  misc.md
+    kub.md                      KAP standards, KUB chain notes
+    examples.md                 upstreams, libraries, security corpora
+  report/
+    gen_report.py               JSON -> HTML, plus --validate
+    example.findings.json       filled-in sample, 7 findings
+  scripts/
+    scan.py                     recon pass
+    slither_to_findings.py      Slither import
 ```
 
 ## Scope & honesty

@@ -1,0 +1,30 @@
+{
+  "name": "cablekungz-skills",
+  "description": "Security tooling skills for Claude Code",
+  "owner": {
+    "name": "CableKungZ",
+    "url": "https://github.com/CableKungZ"
+  },
+  "plugins": [
+    {
+      "name": "smartcontract-audit",
+      "source": "./",
+      "displayName": "Smart Contract Audit",
+      "description": "Audit EVM smart contracts — severity-classified findings, arithmetic & liveness checks, and a self-contained HTML report with red/green code fixes. EVM + KUB Chain.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "homepage": "https://github.com/CableKungZ/smartcontract-audit-skill",
+      "repository": "https://github.com/CableKungZ/smartcontract-audit-skill",
+      "category": "security",
+      "keywords": [
+        "solidity",
+        "smart-contracts",
+        "security",
+        "audit",
+        "evm",
+        "defi",
+        "kub-chain"
+      ]
+    }
+  ]
+}

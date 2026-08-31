@@ -12,13 +12,13 @@ Regenerate the audit report. Findings file: **${1:-findings.json}**, output:
    entry left over from Slither, a `TODO` recommendation):
 
    ```
-   python report/gen_report.py --validate ${1:-findings.json}
+   python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py --validate ${1:-findings.json}
    ```
 
 2. Generate:
 
    ```
-   python report/gen_report.py ${1:-findings.json} ${2:-report.html}
+   python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py ${1:-findings.json} ${2:-report.html}
    ```
 
 3. Report back the counts by severity, and name the one finding to fix first.
