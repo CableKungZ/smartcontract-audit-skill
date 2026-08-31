@@ -17,7 +17,32 @@ single finding before step 4 is done.
 
 ## 0. Mode
 
-`$ARGUMENTS` may contain `quick` or `hard`. **Default is `hard`.**
+`$ARGUMENTS` may contain `quick` or `hard`.
+
+**If the user did not say which, ask before doing anything** — one
+`AskUserQuestion` call, and do not start the scan until it is answered. Never
+pick the mode silently: quick costs a third as much and hard is the only one
+that produces a report, so the choice changes both the bill and the deliverable.
+
+Ask in the same call:
+
+1. **Mode** — `Hard — full audit + HTML report (recommended)` / `Quick — triage
+   list, ~1/3 the tokens, not an audit`.
+2. **Optional steps**, multi-select, each answered Yes/No — offer only the ones
+   that actually apply to this run:
+   - *Slither import* — only if `slither` is on PATH; adds a draft of
+     `Unverified` findings to confirm or drop.
+   - *HTML report* — Yes by default in hard; in quick it is off, and turning it
+     on does **not** upgrade the triage to an audit (the disclaimer still ships).
+   - *Fork diff* — only if the code looks like a fork of something in
+     `examples.md`; diffs it line by line against the upstream tag first.
+   - *Gas pass output* — `forge test --gas-report`, only if `foundry.toml` exists.
+
+Anything the user declines is recorded in the report's Scope as **not
+performed** — a skipped step is a coverage gap, not a silent default.
+
+If the user *did* name a mode, run it without asking, and still ask Yes/No for
+any optional step above that applies.
 
 - **hard** — everything in this file, all seven passes, HTML report.
 - **quick** — triage. Run step 1, load only `methodology.md`, `postmortems.md`

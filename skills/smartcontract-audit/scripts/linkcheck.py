@@ -31,7 +31,7 @@ def collect(root):
         if p.suffix not in SUFFIXES or SKIP_DIRS & set(p.parts):
             continue
         for u in URL.findall(p.read_text(encoding="utf-8", errors="replace")):
-            u = u.rstrip(".,;")
+            u = u.rstrip(".,;`*_")   # markdown punctuation, not part of the url
             if len(u) > len("https://"):
                 urls.setdefault(u, set()).add(str(p.relative_to(root)))
     return urls
@@ -71,6 +71,7 @@ def _selftest():
     assert urls, "found no urls in the skill"
     assert all(u.startswith("http") for u in urls)
     assert check("https://example.com")[1] == 200
+    assert URL.findall("see `https://example.com/a.json` now")[0].rstrip("`")         == "https://example.com/a.json"
     print(f"selftest ok ({len(urls)} urls collected, not fetched)")
 
 

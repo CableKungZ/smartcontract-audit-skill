@@ -36,6 +36,14 @@ Pick one **before** loading anything, and say which one you ran in the report.
 | Output | a ranked markdown list in the terminal: what to look at and why | `findings.json` → HTML report |
 | Cost | roughly a third of Hard | full |
 
+**Ask which mode when the user did not say.** One question, before the scan,
+alongside a Yes/No for every optional step that applies to this run (Slither
+import if `slither` is installed, HTML report, fork diff against an upstream in
+`examples.md`, `forge test --gas-report` if Foundry is set up). Do not default
+silently: quick and hard differ by roughly 3x in cost and produce different
+deliverables, so the choice is the user's. Whatever they decline goes in the
+report's Scope as **not performed**.
+
 **Quick mode is not an audit and must never be presented as one.** End every
 Quick run with this line verbatim:
 
