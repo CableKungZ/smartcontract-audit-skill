@@ -2,9 +2,11 @@
 
 # 🛡️ Smart Contract Audit Skill
 
-**A Claude Code skill for auditing EVM smart contracts — severity-classified
+### Make your smart contracts safe.
+
+**A Claude Code skill that audits EVM smart contracts — severity-classified
 findings, a mandatory arithmetic & liveness pass, and a self-contained HTML
-report with red/green code blocks.**
+report showing the vulnerable code in red and the fix in green.**
 
 [![Skill](https://img.shields.io/badge/Claude%20Code-Skill-d97757?style=flat-square)](https://docs.claude.com/en/docs/claude-code/skills)
 [![Python](https://img.shields.io/badge/python-3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#requirements)
