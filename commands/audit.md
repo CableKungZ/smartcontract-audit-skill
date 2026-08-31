@@ -54,6 +54,7 @@ Then every type catalog that applies — most contracts are two types at once
 | AMM, router, aggregator, any internal swap | `swap.md` |
 | LP accounting, shares, zaps, V3 managers | `liquidity.md` |
 | multisig, 4337/7702, timelock, vesting, custodial | `wallet.md` |
+| deposit/withdraw, escrow, wrapped tokens (WETH/KKUB), splitters | `custody.md` |
 | launchpad/IDO, governance, airdrop, marketplace | `misc.md` |
 | **any protocol that distributes value** (launchpad, curve sale, fee split, settlement) | `economics.md` |
 | **anything on KUB Chain** | `kub.md` (on top of the type catalog) |
@@ -75,7 +76,7 @@ For each item: is it reachable here? Write the exploit as **concrete steps with
 numbers**. If you can't, it is Informational or not a finding. Drop what doesn't
 apply — do not pad.
 
-Five passes are mandatory whatever the type:
+Six passes are mandatory whatever the type:
 
 1. **Arithmetic** (`arithmetic.md`) — every narrowing cast (silent truncation in
    0.8), every denominator's minimum value, every monotonic accumulator against
@@ -86,7 +87,11 @@ Five passes are mandatory whatever the type:
 3. **Loops & gas** (`gas.md`) — for every loop: who controls the bound, and what
    dies past the block gas limit.
 4. **Centralization** — every privileged function, who holds it, loss on compromise.
-5. **Value accounting** (`economics.md`) — where every unit ends up, whether
+5. **Custody** (`custody.md`) — if it holds anyone else's value: every path
+   value leaves by, its destination, its bound. The operator must not be able
+   to move a user's balance in any case; every supply increase must take
+   custody in the same transaction.
+6. **Value accounting** (`economics.md`) — where every unit ends up, whether
    pricing parameters are per-item or global-mutable, and whether any capital
    is placed somewhere participants can never reach it. Compute the numbers.
 

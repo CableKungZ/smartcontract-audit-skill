@@ -22,7 +22,7 @@ report showing the vulnerable code in red and the fix in green.**
 Point it at a Solidity contract and it runs a structured audit: recon → catalog
 walk → concrete exploit scenarios → severity classification → HTML report.
 
-- **12 vulnerability catalogs**, one per contract type, each with real incidents
+- **13 vulnerability catalogs**, one per contract type, each with real incidents
   and the exact code pattern to look for.
 - **Mandatory arithmetic & liveness pass** — narrowing casts that truncate
   silently in Solidity 0.8, accumulators that overflow their type, and every way
@@ -33,6 +33,10 @@ walk → concrete exploit scenarios → severity classification → HTML report.
   layer that would be a Critical finding anywhere else and is expected here.
 - **Fork diffing** — a table of upstream implementations to diff against,
   because most fork exploits are one changed constant.
+- **Custody rules** — for anything holding user funds: the operator must never
+  be able to withdraw a customer's balance, and a 1:1 wrapper (KUB→KKUB) must
+  have no mint path other than depositing the underlying. Both are checked
+  mechanically, not taken on trust.
 - **Value accounting** — where every unit of value ends up, whether pricing
   parameters are per-item or global-mutable, and whether capital is placed
   somewhere participants can never reach it.
@@ -122,6 +126,7 @@ privilege required — the full rubric is in
 | AMM, routers, aggregators | [`swap.md`](skills/smartcontract-audit/references/swap.md) | slippage/deadline, `k` invariant, V3 callback auth, MEV |
 | LP accounting, zaps, V3 managers | [`liquidity.md`](skills/smartcontract-audit/references/liquidity.md) | first-depositor inflation, share rounding, LP pricing |
 | Wallets, 4337/7702, timelocks | [`wallet.md`](skills/smartcontract-audit/references/wallet.md) | signature replay, threshold bypass, delegatecall, recovery |
+| Deposit/withdraw, escrow, wrapped tokens | [`custody.md`](skills/smartcontract-audit/references/custody.md) | operator-cannot-withdraw rule, solvency invariant, escrow state machine, the no-mint rule for 1:1 wrappers |
 | Launchpad, governance, airdrop, marketplace | [`misc.md`](skills/smartcontract-audit/references/misc.md) | refund paths, flash-loan voting, merkle leaves, auction griefing |
 | Anything that distributes value | [`economics.md`](skills/smartcontract-audit/references/economics.md) | value map, admin levers, unreachable liquidity, sequenced remediation |
 | **Every audit** | [`arithmetic.md`](skills/smartcontract-audit/references/arithmetic.md) | overflow, truncation, precision, **and contract bricking** |
@@ -222,6 +227,7 @@ skills/smartcontract-audit/
     staking.md  token.md  lending.md  defi.md
     swap.md  liquidity.md  wallet.md  misc.md
     economics.md                value map, admin levers, unreachable liquidity
+    custody.md                  deposit/withdraw, escrow, wrapped receipts
     kub.md                      KAP standards, KUB chain notes
     examples.md                 upstreams, libraries, security corpora
   report/

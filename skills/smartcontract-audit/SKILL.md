@@ -7,8 +7,10 @@ description: >
   blocks, impact analysis and concrete remediation.
   Use when the user asks to audit, security-review, or find vulnerabilities in a
   Solidity/Vyper contract. Shared methodology plus per-contract-type catalogs
-  (staking, token, lending, defi, swap, liquidity, wallet, launchpad/governance),
-  a mandatory arithmetic/overflow/liveness pass, a loop & gas pass, reference
+  (staking, token, lending, defi, swap, liquidity, wallet, launchpad/governance,
+  and custody: deposit/withdraw, escrow, and wrapped 1:1 receipt tokens such as
+  WETH or KKUB where no mint path may exist besides depositing the underlying),
+  mandatory arithmetic/overflow/liveness, loop & gas, and custody passes, reference
   implementations to diff forks against, and chain-specific notes including
   KUB Chain / KAP standards.
 model: opus
@@ -24,7 +26,7 @@ This skill sets `model: opus` and `effort: high` in its frontmatter so every run
 starts from the same footing. Two audits of the same contract should reach the
 same findings, and they only do if the reasoning budget is the same.
 
-- **Effort must be `high` or above.** Drop to `low`/`medium` and the five
+- **Effort must be `high` or above.** Drop to `low`/`medium` and the six
   mandatory passes in step 3 get skimmed — the failures that go missing first
   are exactly the ones that need arithmetic carried through: type-range
   overflow, rounding direction, and the "can this revert forever" question.
@@ -84,6 +86,7 @@ farm is staking + token; a vault is liquidity + defi).
 | AMM cores, routers, aggregators, any internal swap | `references/swap.md` |
 | LP mint/burn, share math, zaps, V3 liquidity managers | `references/liquidity.md` |
 | Multisig, smart accounts (4337/7702), timelocks, vesting, custodial wallets | `references/wallet.md` |
+| Deposit/withdraw vaults, escrow, wrapped & receipt tokens (WETH/KKUB), payment splitters | `references/custody.md` |
 | Launchpad/IDO, governance/DAO, airdrop/merkle, NFT marketplace | `references/misc.md` |
 | Any protocol that distributes value — launchpad, curve sale, fee split, settlement | `references/economics.md` |
 | **Anything deployed on KUB Chain / Bitkub** | `references/kub.md` (**always**, on top of the type catalog) |
@@ -115,7 +118,7 @@ For each item: is it reachable in *this* code? Construct a concrete failure
 scenario — **inputs → wrong state / loss, with numbers**. If you can't write it,
 it is Informational or not a finding. Drop what doesn't apply; don't pad.
 
-Five passes are mandatory whatever the contract type:
+Six passes are mandatory whatever the contract type:
 
 1. **Arithmetic** (`arithmetic.md`) — every narrowing cast (silent truncation in
    0.8), every denominator's minimum value, every monotonic accumulator against
@@ -129,7 +132,12 @@ Five passes are mandatory whatever the contract type:
    (BNB, Polygon, KUB) this is a real attack, not a theoretical one.
 4. **Centralization** — every privileged function, the address holding it,
    whether it is an EOA / multisig / timelock, and the loss on compromise.
-5. **Value accounting** (`economics.md`) — the money map: where every unit
+5. **Custody** (`custody.md`) — if the contract holds anyone else's value:
+   list every path value can leave by, its destination and its bound. The
+   operator must not be able to move a user's balance under **any**
+   circumstance; a supply-increasing path must take custody in the same
+   transaction. Put the conclusion in the executive summary as a sentence.
+6. **Value accounting** (`economics.md`) — the money map: where every unit
    ends up, whether pricing/settlement parameters are snapshotted per item or
    read from mutable globals, and whether capital is placed somewhere the
    finite float can never reach. Compute every number you state.

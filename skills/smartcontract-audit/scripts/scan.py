@@ -69,6 +69,14 @@ PATTERNS = [
     ("decimals-call",  r"\.decimals\s*\(",
      "read per token at point of use; never cache across a mutable address",
      "arithmetic.md"),
+    ("mint-site",      r"\b_mint\s*\(|\btotalSupply\s*\+=|\b_update\s*\(\s*address\s*\(\s*0",
+     "supply increase -- which entry points reach it, and does each take custody?",
+     "custody.md"),
+    ("payout-to-param",
+     r"function\s+\w*(?:[Ww]ithdraw|[Rr]ecover|[Rr]escue|[Ss]weep|[Cc]laim|[Tt]ransfer)"
+     r"\w*\s*\([^)]*\baddress\b",
+     "value leaves to a caller-supplied address -- bounded to their own balance?",
+     "custody.md"),
 ]
 
 FUNC = re.compile(
@@ -231,6 +239,8 @@ contract T {
         x = uint128(a);
         payable(msg.sender).transfer(a);
     }
+    function deposit(uint256 a) external { _mint(msg.sender, a); }
+    function rescue(address token, address to, uint256 a) external onlyOwner {}
     function _internal() internal {}
 }
 """
@@ -239,13 +249,15 @@ contract T {
     r = scan_file(p)
     assert r["pragma"].strip() == "^0.8.24", r["pragma"]
     assert r["license"] == "MIT"
-    assert [f["name"] for f in r["functions"]] == ["withdraw"], r["functions"]
+    assert "withdraw" in [f["name"] for f in r["functions"]], r["functions"]
     assert r["functions"][0]["modifiers"] == ["onlyOwner"]
     assert "delegatecall" not in r["risks"], "comment was not stripped"
     assert "transfer-2300" in r["risks"]
     assert len(r["loops"]) == 1 and "users.length" in r["loops"][0]["bound"]
     assert any(c["type"] == "uint128" for c in r["casts"])
     assert r["division_lines"]
+    assert "mint-site" in r["risks"], "supply increase not flagged"
+    assert "payout-to-param" in r["risks"], "arbitrary payout destination not flagged"
     print("selftest ok")
 
 
