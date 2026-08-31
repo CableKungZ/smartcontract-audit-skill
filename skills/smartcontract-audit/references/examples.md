@@ -27,6 +27,69 @@ Battle-tested contracts to compare an audited contract against. Two uses:
 | Uniswap `FullMath` | https://github.com/Uniswap/v3-core/blob/main/contracts/libraries/FullMath.sol | 512-bit `mulDiv` — the standard fix for "intermediate overflows before division". |
 | Chainlink contracts | https://github.com/smartcontractkit/chainlink-evm/tree/develop/contracts | `AggregatorV3Interface`, and the L2 sequencer-uptime feed example. |
 
+### Check the pinned library version against known advisories
+
+**Do this before reading any inherited contract.** "Uses OpenZeppelin" is not a
+safety property — a specific version is. Resolve the version actually compiled:
+
+```
+grep -r "@openzeppelin" package.json remappings.txt        # declared
+sed -n 's/.*"@openzeppelin\/contracts": "\(.*\)".*/\1/p' package-lock.json
+git -C lib/openzeppelin-contracts describe --tags          # forge submodule
+npm audit --omit=dev                                       # authoritative
+```
+
+A submodule pinned to a commit is the common trap: `package.json` says `^5.0.0`
+while `lib/` sits on a 4.x commit from two years ago. Report the version and the
+resolution method in the report's method section.
+
+**OpenZeppelin Contracts advisories** (`@openzeppelin/contracts` and
+`-upgradeable` share version numbers). If the pinned version falls in a
+vulnerable range **and** the contract uses the affected component, it is a
+finding at the listed severity — not an informational note.
+
+| Advisory | Component | Vulnerable | Patched | Effect |
+|---|---|---|---|---|
+| GHSA-5vp3-v4hc-gx76 | `UUPSUpgradeable` | ≥4.1.0 <4.3.2 | 4.3.2 | **Critical** — uninitialized implementation can be `selfdestruct`ed, bricking the proxy (see `postmortems.md` §6). |
+| GHSA-fg47-3c2x-m2wr | `TimelockController` | 3.3.0–3.4.1, 4.0.0–4.3.0 | 3.4.2 / 4.3.1 | **Critical** — executor role takes immediate control of the timelock. |
+| GHSA-4h98-2769-gh6h | `ECDSA.recover/tryRecover` | ≥4.1.0 <4.7.3 | 4.7.3 | **High** — EIP-2098 compact signatures accepted → malleability; breaks any `usedSignature` replay guard. |
+| GHSA-xrc4-737v-9q75 | `GovernorVotesQuorumFraction` | ≥4.3.0 <4.7.2 | 4.7.2 | **High** — lowering quorum makes previously defeated proposals executable. |
+| GHSA-qh9x-gcfh-pcrw | `ERC165Checker.supportsInterface` | ≥4.0.0 <4.7.1 | 4.7.1 | **High** — reverts instead of returning false → DoS on registration paths. |
+| GHSA-7grf-83vw-6f5x | `ERC165Checker` | ≥2.0.0 <4.7.2 | 4.7.2 | Unbounded gas consumption from a hostile target. |
+| GHSA-4g63-c64m-25w9 | `SignatureChecker` | ≥4.1.0 <4.7.1 | 4.7.1 | Reverts on an invalid EIP-1271 signer instead of returning false. |
+| GHSA-699g-q6qh-q4v8 | `Multicall` | 4.9.4 only | 4.9.5 | **Every subcall executes twice.** Double-spend on any batched state change. |
+| GHSA-wprv-93r4-jj2p | `MerkleProof` multiproofs | ≥4.7.0 <4.9.2 | 4.9.2 | Forge a valid multiproof for arbitrary leaves → unlimited airdrop claims. |
+| GHSA-5h3x-9wvq-w4m2 | `Governor` | ≥4.3.0 <4.9.1 | 4.9.1 | Proposal creation frontrun → attacker becomes proposer and cancels. |
+| GHSA-93hq-5wgc-jc82 | `GovernorCompatibilityBravo` | ≥4.3.0 <4.8.3 | 4.8.3 | Short `signatures` array trims proposal calldata → executes a different payload than voted. |
+| GHSA-m6w8-fq7v-ph4m | `GovernorCompatibilityBravo` | ≥4.3.0 <4.4.2 | 4.4.2 | Explicit function signatures execute with wrong arguments. |
+| GHSA-878m-3g6q-594q | `ERC721Consecutive` | ≥4.8.0 <4.8.2 | 4.8.2 | Batch of 1 skips the balance update → later transfer underflows. |
+| GHSA-wmpv-c2jp-j2xg | `ERC1155Supply` | ≥4.2.0 <4.3.3 | 4.3.3 | `totalSupply` updated after the receiver callback → reentrancy reads stale supply. |
+| GHSA-9c22-pwxw-p6hx | `Initializable` | ≥3.2.0 <4.4.1 | 4.4.1 | Initializer reentrancy → double initialization. |
+| GHSA-g4vp-m682-qqmp | `ERC2771Context` | ≥4.0.0 <4.9.3 | 4.9.3 | Short calldata from a custom forwarder → `_msgSender()` returns `address(0)`. |
+| GHSA-mx2q-35m2-x2rh | `TransparentUpgradeableProxy` | ≥3.2.0 <4.8.3 | 4.8.3 | Selector clash with the admin interface stops delegation to the implementation. |
+| GHSA-9vx6-7xxf-x967 | `Base64.encode` | ≥4.5.0 <5.0.2 | 5.0.2 / 4.9.6 | Reads dirty memory past the buffer. |
+| GHSA-9j3m-g383-29qr | `CrossChainEnabledArbitrumL2` | ≥4.6.0 <4.7.2 | 4.7.2 | EOA interactions classified as cross-chain calls. |
+| GHSA-9rcw-c2f9-2j55 | `Bytes.lastIndexOf` | ≥5.2.0 <5.4.0 | 5.4.0 | Out-of-bounds read on an empty buffer. |
+
+Current list: https://github.com/OpenZeppelin/openzeppelin-contracts/security/advisories
+— re-check it at audit time; this table is a snapshot, not the source of truth.
+
+**Version-migration pitfalls that are not advisories but break forks:**
+
+- **v4 → v5**: `_beforeTokenTransfer`/`_afterTokenTransfer` are gone (use
+  `_update`) — a hook that silently stopped running is a real finding, not a
+  compile error, in code that overrode it via a diamond of inherited contracts.
+  `Ownable` now takes an owner in the constructor; `Ownable()` with no argument
+  reverts at deploy. `ERC20Permit` moved to `Nonces`. Custom errors replaced
+  string reverts — any off-chain code or test matching on revert strings breaks.
+- **Mixing v4 and v5 files** in one project (npm dependency at v5, vendored copy
+  at v4) — check for two `Ownable.sol` on different remappings.
+- **Upgradeable ≠ non-upgradeable**: an upgradeable contract that inherits a
+  non-upgradeable OZ base has a constructor that never runs on the proxy, so its
+  state stays zero. Grep for imports missing the `-upgradeable` suffix.
+- `__gap` removed or resized in a fork of an upgradeable OZ base → storage
+  collision on the next upgrade.
+
 ## Staking
 
 | Project | Where | Read it for |

@@ -11,6 +11,8 @@ every hit still has to be read in context. It finds nothing on its own.
 Sections printed:
   files       loc, pragma, licence, imports (which library + version pinned?)
   surface     external/public functions, their modifiers, payable, view
+  type        which catalogs to load, inferred from identifiers in the code,
+              plus a name-vs-body check (a file called Token.sol that stakes)
   risk        one line per pattern hit, grouped -- see PATTERNS below
   loops       every for/while with the bound expression (see references/gas.md)
   casts       every narrowing cast (see references/arithmetic.md)
@@ -77,6 +79,18 @@ PATTERNS = [
      r"\w*\s*\([^)]*\baddress\b",
      "value leaves to a caller-supplied address -- bounded to their own balance?",
      "custody.md"),
+    ("eoa-check",      r"\bextcodesize\b|\.code\.length|\bisContract\s*\(",
+     "EIP-7702: msg.sender being an EOA no longer means it has no code",
+     "postmortems.md"),
+    ("scale-pair",     r"\b(upscale|downscale|_scale|toShares|toAssets|convertTo\w+)\b",
+     "paired conversions must both round toward the protocol -- Balancer V2",
+     "postmortems.md"),
+    ("rounding-flag",  r"\b(divUp|divDown|mulDivRoundingUp|mulUp|mulDown|Rounding\.)\b",
+     "explicit rounding direction -- verify it favours the protocol on both legs",
+     "postmortems.md"),
+    ("xchain-receive", r"\b(_?lzReceive|ccipReceive|_?nonblockingLzReceive|onMessageReceived|receiveMessage)\b",
+     "inbound message mints/releases -- verifier threshold, replay binding, rate limit",
+     "postmortems.md"),
 ]
 
 FUNC = re.compile(
@@ -88,6 +102,73 @@ PRAGMA = re.compile(r"pragma\s+solidity\s+([^;]+);")
 LICENSE = re.compile(r"SPDX-License-Identifier:\s*(\S+)")
 IMPORT = re.compile(r'^\s*import\s+.*?["\']([^"\']+)["\']', re.M)
 VISIBLE = re.compile(r"\b(external|public)\b")
+CONTRACT = re.compile(r"\b(?:contract|library|interface|abstract\s+contract)\s+(\w+)")
+
+# Contract type is decided by the identifiers in the code, never by the file
+# name. A file called Token.sol routinely contains a staking pool, and a
+# "Vault" is whatever its functions say it is. catalog -> identifier regex.
+TYPE_SIGNALS = [
+    ("staking.md", r"\b(stake|unstake|withdrawStake|rewardPerToken|rewardRate|"
+     r"accRewardPerShare|rewardDebt|notifyRewardAmount|earned|pendingReward\w*|"
+     r"allocPoint|massUpdatePools|poolInfo|userInfo|harvest|lockEnd|votingEscrow|"
+     r"boost\w*|periodFinish|lastTimeRewardApplicable)\b"),
+    ("token.md", r"\b(_mint|_burn|totalSupply|allowance|transferFrom|permit|"
+     r"safeTransferFrom|tokenURI|balanceOfBatch|setApprovalForAll|"
+     r"adminTransfer|activateOnlyKycAddress|_beforeTokenTransfer|_update)\b"),
+    ("lending.md", r"\b(borrow|repay|liquidat\w*|collateral\w*|healthFactor|"
+     r"ltv|loanToValue|borrowIndex|utilizationRate|interestRateModel|"
+     r"exchangeRateStored|seize|badDebt|debtShares|accrueInterest)\b"),
+    ("defi.md", r"\b(flashLoan|flashLoanSimple|onFlashLoan|executeOperation|"
+     r"latestRoundData|latestAnswer|getPrice|consult|twap|oracle|strategy|"
+     r"harvestStrategy|leverage|fundingRate|openPosition|closePosition|"
+     r"bridge|relay|attest)\b"),
+    ("swap.md", r"\b(swap|swapExactTokensFor\w*|swapTokensForExact\w*|getAmountOut|"
+     r"getAmountsIn|amountOutMin|amountInMax|sqrtPriceX96|slot0|getReserves|"
+     r"path|router|quote|exactInput\w*|exactOutput\w*)\b"),
+    ("liquidity.md", r"\b(addLiquidity\w*|removeLiquidity\w*|mintLiquidity|burnLiquidity|"
+     r"totalShares|totalAssets|convertToShares|convertToAssets|previewDeposit|"
+     r"previewRedeem|zapIn|zapOut|rebalance|tickLower|tickUpper|feeGrowth\w*)\b"),
+    ("wallet.md", r"\b(execTransaction|executeBatch|validateUserOp|userOpHash|"
+     r"entryPoint|isValidSignature|threshold|owners|addOwner|removeOwner|"
+     r"nonce|guardian|recover\w*|schedule|queueTransaction|executeTransaction|"
+     r"vest\w*|cliff|releasable|delegat\w*)\b"),
+    ("custody.md", r"\b(deposit|withdraw|escrow|release|refund|wrap|unwrap|"
+     r"sweep|rescue\w*|emergencyWithdraw|custod\w*|splitter|releaseAll|"
+     r"safeTransferETH|receive)\b"),
+    ("misc.md", r"\b(buyTokens|contribute|softCap|hardCap|finalize|claim|"
+     r"merkleRoot|merkleProof|verifyProof|propose|castVote|quorum|"
+     r"getPastVotes|delegateBySig|listItem|buyItem|placeBid|settleAuction|"
+     r"royalt\w*|whitelist\w*)\b"),
+    ("economics.md", r"\b(feeBps|platformFee|protocolFee|treasury|feeRecipient|"
+     r"referr\w*|revenueShare|distribute\w*|payout|settle\w*|pricePerToken|"
+     r"tierPrice|commission)\b"),
+    ("kub.md", r"\b(kap|KAP\d+|adminTransfer|committee|acceptedKyc\w*|kyc|"
+     r"KYCBitkubChain|nextAcceptedKycLevel|bitkub|kkub)\b"),
+    ("postmortems.md", r"\b(upscale|downscale|_scale|lzReceive|ccipReceive|"
+     r"initialize|reinitializer|_authorizeUpgrade|upgradeTo\w*|"
+     r"extcodesize|isContract)\b"),
+]
+
+# What the *name* advertises: file name and declared contract name only.
+# Compared against the body signals above; disagreement is the finding.
+NAME_HINTS = [
+    ("staking.md", r"stak|farm|masterchef|chef|reward|escrow(ed)?token|ve[A-Z]|"
+     r"gauge|lock(er|up)?|miner?"),
+    ("token.md", r"token|erc20|erc721|erc1155|nft|coin|mintable|kap20|kap721"),
+    ("lending.md", r"lend|borrow|loan|debt|cdp|ctoken|comptroller|troller|"
+     r"collateral|liquidat"),
+    ("defi.md", r"vault|strateg|oracle|price(feed)?|perp|bridge|relay|flash|yield"),
+    ("swap.md", r"swap|router|pair|amm|dex|aggregator|quoter|exchange"),
+    ("liquidity.md", r"liquidit|pool|lp\b|zap|position(manager)?|shares?"),
+    ("wallet.md", r"wallet|safe|multisig|account|timelock|vesting|guardian|"
+     r"session|paymaster|delegat"),
+    ("custody.md", r"custod|deposit|withdraw|escrow|wrapp?ed|weth|kkub|splitter|"
+     r"treasury|bank|payment"),
+    ("misc.md", r"launch|ido|presale|sale|crowdsale|govern|dao|voting|airdrop|"
+     r"merkle|distributor|market(place)?|auction"),
+    ("economics.md", r"fee|revenue|distribut|payout|settle|commission|referral"),
+    ("kub.md", r"kap|kub|bitkub"),
+]
 
 
 def strip_comments(src):
@@ -133,8 +214,26 @@ def scan_file(path):
     casts = [{"line": line_of(src, m.start()), "type": m.group(1)} for m in CAST.finditer(src)]
     math = sorted({line_of(src, m.start()) for m in DIV.finditer(src)})
 
+    # Type inference from identifiers. Case-insensitive on purpose: a fork that
+    # renamed stake() to Stake() or STAKE_AMOUNT is still a staking contract.
+    signals = {}
+    for catalog, pat in TYPE_SIGNALS:
+        hits = sorted({m.group(0) for m in re.finditer(pat, src, re.I)})
+        if hits:
+            signals[catalog] = hits
+
+    # What the naming advertises: file name + declared contract names. Where
+    # this disagrees with the body, the names are lying about what the code
+    # does — the file is not the case it claims to be. Read it twice.
+    name_blob = " ".join([os.path.basename(rel)] + CONTRACT.findall(src))
+    name_signals = {c for c, pat in NAME_HINTS
+                    if re.search(pat, name_blob, re.I)}
+
     return {
         "file": rel,
+        "contracts": CONTRACT.findall(src),
+        "type_signals": signals,
+        "name_signals": sorted(name_signals),
         "loc": raw.count("\n") + 1,
         "pragma": (PRAGMA.search(src) or [None, None])[1],
         "license": (LICENSE.search(raw) or [None, None])[1],
@@ -171,6 +270,45 @@ def report(results):
           f"  licence {r['license'] or 'MISSING'}\n")
         for i in r["imports"]:
             w(f"      import {i}\n")
+
+    w("\n=== CONTRACT TYPE (inferred from identifiers, NOT from the file name) ===\n")
+    agg = defaultdict(lambda: defaultdict(set))   # catalog -> file -> idents
+    for r in results:
+        for catalog, hits in r["type_signals"].items():
+            agg[catalog][r["file"]].update(hits)
+    if not agg:
+        w("  no type signals -- classify by reading the code\n")
+    for catalog in sorted(agg, key=lambda c: -sum(len(v) for v in agg[c].values())):
+        idents = sorted({i for v in agg[catalog].values() for i in v})
+        w(f"\n  LOAD references/{catalog}   ({len(idents)} identifier"
+          f"{'s' if len(idents) != 1 else ''})\n")
+        w("      " + ", ".join(idents[:14]) +
+          (f", +{len(idents) - 14} more" if len(idents) > 14 else "") + "\n")
+        for f in sorted(agg[catalog]):
+            w(f"      {f}\n")
+
+    w("\n  -- name vs body --\n")
+    w("  A name is a claim, not evidence. Every line below is a claim the body\n"
+      "  does not back, or a behaviour the names hide. Read those files twice.\n")
+    any_mismatch = False
+    for r in results:
+        body = set(r["type_signals"])
+        claimed = set(r["name_signals"])
+        hidden = sorted(body - claimed)      # body does it, names never say so
+        unbacked = sorted(claimed - body)    # names say so, body has nothing
+        if hidden or unbacked:
+            any_mismatch = True
+            w(f"    {r['file']}"
+              f"  [contract {', '.join(r['contracts']) or '?'}]\n")
+            if hidden:
+                w(f"        name hides this: {', '.join(hidden)}"
+                  f"   <- load these anyway\n")
+            if unbacked:
+                w(f"        name advertises, body has nothing: "
+                  f"{', '.join(unbacked)}   <- wrong file, dead code, or the"
+                  f" logic lives elsewhere\n")
+    if not any_mismatch:
+        w("    names and bodies agree in every file\n")
 
     w("\n=== EXTERNAL SURFACE (who can call what) ===\n")
     for r in results:
@@ -258,6 +396,12 @@ contract T {
     assert r["division_lines"]
     assert "mint-site" in r["risks"], "supply increase not flagged"
     assert "payout-to-param" in r["risks"], "arbitrary payout destination not flagged"
+    assert "custody.md" in r["type_signals"], "deposit/withdraw not typed"
+    assert "token.md" in r["type_signals"], "_mint not typed"
+    # the file is called T.sol and nothing in its names says "token", but the
+    # body mints -- exactly the mismatch the name-vs-body section must catch
+    assert "token.md" not in r["name_signals"], r["name_signals"]  # T.sol
+    assert r["contracts"] == ["T"], r["contracts"]
     print("selftest ok")
 
 

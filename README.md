@@ -22,7 +22,7 @@ report showing the vulnerable code in red and the fix in green.**
 Point it at a Solidity contract and it runs a structured audit: recon → catalog
 walk → concrete exploit scenarios → severity classification → HTML report.
 
-- **13 vulnerability catalogs**, one per contract type, each with real incidents
+- **14 vulnerability catalogs**, one per contract type, each with real incidents
   and the exact code pattern to look for.
 - **Mandatory arithmetic & liveness pass** — narrowing casts that truncate
   silently in Solidity 0.8, accumulators that overflow their type, and every way
@@ -73,7 +73,7 @@ python $S/scripts/scan.py contracts/
 slither contracts/ --json slither.json
 python $S/scripts/slither_to_findings.py slither.json > draft.findings.json
 
-# 3. Audit (in Claude Code)
+# 3. Audit (in Claude Code) -- add `quick` for cheap triage instead
 /audit contracts/Staking.sol
 
 # 4. Report
@@ -158,11 +158,11 @@ Source: [docs.kubchain.com](https://docs.kubchain.com/quickstart/launching-a-tok
 
 | Tool | What it does |
 |---|---|
-| `scripts/scan.py` | Regex recon: external surface + modifiers, every loop with its bound, every narrowing cast, every division, 19 risk patterns each pointing at the relevant catalog. `--json` for machine output. |
+| `scripts/scan.py` | Regex recon: external surface + modifiers, every loop with its bound, every narrowing cast, every division, 27 risk patterns each pointing at the relevant catalog. `--json` for machine output. |
 | `scripts/slither_to_findings.py` | Converts `slither --json` into draft findings, mapped one severity level *below* what Slither claims, every entry `Unverified` until a human confirms it. |
 | `scripts/linkcheck.py` | Verifies every reference URL still resolves — a report citing a 404 is a report the reader stops trusting. Exit code = dead links, so it drops into CI. |
 | `report/gen_report.py` | `findings.json` → self-contained HTML. `--validate` checks schema, duplicate ids, severity/id-prefix mismatch, leftover `Unverified`, `TODO` recommendations, missing summary or trust assumptions. |
-| `/audit <path>` | Runs the whole workflow end to end. |
+| `/audit <path> [quick\|hard]` | `hard` (default) runs the whole workflow end to end and writes the HTML report. `quick` is triage: recon + the catalogs `scan.py` points at, a ranked list in the terminal, labelled as not-an-audit. |
 | `/audit-report [json] [html]` | Validates and regenerates the report. |
 
 Every script is stdlib-only and has a `--selftest`:
@@ -229,7 +229,8 @@ skills/smartcontract-audit/
     economics.md                value map, admin levers, unreachable liquidity
     custody.md                  deposit/withdraw, escrow, wrapped receipts
     kub.md                      KAP standards, KUB chain notes
-    examples.md                 upstreams, libraries, security corpora
+    postmortems.md              checks derived from real 2024-2026 exploits
+    examples.md                 upstreams, libraries, OZ advisory versions
   report/
     gen_report.py               JSON -> HTML, plus --validate
     example.findings.json       filled-in sample, 7 findings

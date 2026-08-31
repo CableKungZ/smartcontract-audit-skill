@@ -10,7 +10,10 @@ description: >
   (staking, token, lending, defi, swap, liquidity, wallet, launchpad/governance,
   and custody: deposit/withdraw, escrow, and wrapped 1:1 receipt tokens such as
   WETH or KKUB where no mint path may exist besides depositing the underlying),
-  mandatory arithmetic/overflow/liveness, loop & gas, and custody passes, reference
+  mandatory arithmetic/overflow/liveness, loop & gas, and custody passes, an
+  incident-replay pass derived from real 2024-2026 exploits, a Quick triage mode
+  and a full Hard audit mode, a check of the
+  pinned OpenZeppelin version against known advisories, reference
   implementations to diff forks against, and chain-specific notes including
   KUB Chain / KAP standards.
 model: opus
@@ -20,13 +23,43 @@ license: MIT
 
 # Smart Contract Audit
 
+## Two modes: Quick and Hard
+
+Pick one **before** loading anything, and say which one you ran in the report.
+
+| | **Quick** (triage) | **Hard** (audit — the default) |
+|---|---|---|
+| When | first look, a fork you are sizing up, a PR diff, a contract you have already audited | anything holding real value, anything before deployment, anything a client pays for |
+| Loads | `methodology.md` + `postmortems.md` + the type catalog(s) `scan.py` points at | every catalog in the table below, all seven passes |
+| Effort | `medium` acceptable | `high` minimum, `xhigh` for large value |
+| Reads | `scan.py` output, then only the lines it flags | every in-scope file end to end |
+| Output | a ranked markdown list in the terminal: what to look at and why | `findings.json` → HTML report |
+| Cost | roughly a third of Hard | full |
+
+**Quick mode is not an audit and must never be presented as one.** End every
+Quick run with this line verbatim:
+
+> Triage only — catalogs partially loaded, code not read end to end. Not an
+> audit. Run `/audit <path> hard` before deploying or relying on this.
+
+Quick may *raise* an alarm; it may never clear one. "Nothing found in Quick" is
+reported as "nothing found in the flagged lines", never as "looks safe".
+Anything Quick finds at Critical or High stops the triage — switch to Hard.
+
+Everything below this section describes **Hard**. In Quick, skip step 2, run
+step 3's passes only against the lines `scan.py` flagged, and stop after a
+terminal list — no `findings.json`, no HTML.
+
 ## Run conditions — do not audit below these
 
 This skill sets `model: opus` and `effort: high` in its frontmatter so every run
 starts from the same footing. Two audits of the same contract should reach the
 same findings, and they only do if the reasoning budget is the same.
 
-- **Effort must be `high` or above.** Drop to `low`/`medium` and the six
+These apply to **Hard**. Quick relaxes effort and coverage, and pays for it by
+being labelled as triage — it does not get to relax the labelling.
+
+- **Effort must be `high` or above.** Drop to `low`/`medium` and the seven
   mandatory passes in step 3 get skimmed — the failures that go missing first
   are exactly the ones that need arithmetic carried through: type-range
   overflow, rounding direction, and the "can this revert forever" question.
@@ -74,6 +107,23 @@ Never ship an Unverified entry.
 
 ### 1. Identify contract type + chain, load catalogs
 
+**Type comes from the identifiers, never from the file name.** `Token.sol`
+routinely holds a staking pool, `Vault.sol` is whatever its functions say it is,
+and a fork renames things freely. `scan.py`'s `CONTRACT TYPE` section does this
+pass for you: it maps the function, variable and event names actually present in
+the source to catalogs, and prints a **name-vs-body** check —
+
+- *name hides this* → the file does something its name never advertises. Load
+  those catalogs anyway; this is where the missed findings live.
+- *name advertises, body has nothing* → either the logic lives in another
+  contract (find it, it is in scope) or it is dead code. Say which in the report.
+
+A disagreement between a name and its behaviour is a finding in its own right
+once it is inside the code too: a `safeX` that is not safe, an `onlyOwner`-named
+modifier that checks nothing, a `totalStaked` that is not the sum of stakes.
+Names are a claim; the body is the evidence. Where they differ, integrators
+build against the claim — file it, severity by what an integrator would lose.
+
 Load **every** catalog that applies — most contracts are two types at once (a
 farm is staking + token; a vault is liquidity + defi).
 
@@ -96,10 +146,20 @@ farm is staking + token; a vault is liquidity + defi).
 - `references/arithmetic.md` — overflow / narrowing casts / precision, and the
   **contract-liveness (bricking)** pass.
 - `references/gas.md` — loops, gas griefing, and optimization.
+- `references/postmortems.md` — checks derived from real 2024–2026 incidents
+  (rounding inconsistency, a wrong overflow *check*, donation on a fresh market,
+  cross-chain verifier config, uninitialized proxies, EIP-7702, expiring pauses).
 
 **If the contract is a fork**, find its upstream in `references/examples.md` and
 diff it line by line *before* anything else. Uranium Finance lost $50M to one
-constant changed in one branch.
+constant changed in one branch. Check the upstream's **security advisories**
+too, not only its current source — Balancer V2's 2025 exploit hit its forks on
+other chains the same day.
+
+**Resolve the pinned version of every library** (OpenZeppelin, Solmate, Solady)
+and check it against the advisory table in `references/examples.md`. A
+vulnerable version whose affected component is actually used is a finding at the
+listed severity.
 
 ### 2. Read the contract(s) end to end
 
@@ -118,7 +178,7 @@ For each item: is it reachable in *this* code? Construct a concrete failure
 scenario — **inputs → wrong state / loss, with numbers**. If you can't write it,
 it is Informational or not a finding. Drop what doesn't apply; don't pad.
 
-Six passes are mandatory whatever the contract type:
+Seven passes are mandatory whatever the contract type:
 
 1. **Arithmetic** (`arithmetic.md`) — every narrowing cast (silent truncation in
    0.8), every denominator's minimum value, every monotonic accumulator against
@@ -137,7 +197,12 @@ Six passes are mandatory whatever the contract type:
    operator must not be able to move a user's balance under **any**
    circumstance; a supply-increasing path must take custody in the same
    transaction. Put the conclusion in the executive summary as a sentence.
-6. **Value accounting** (`economics.md`) — the money map: where every unit
+6. **Incident replay** (`postmortems.md`) — walk each numbered class against
+   this code. Two of them apply to almost every contract: the paired-rounding
+   check (does splitting an operation into N smaller ones ever yield more than
+   doing it once?) and the pinned-library-version check against the advisory
+   table in `examples.md`. Cite the incident in any finding it produces.
+7. **Value accounting** (`economics.md`) — the money map: where every unit
    ends up, whether pricing/settlement parameters are snapshotted per item or
    read from mutable globals, and whether capital is placed somewhere the
    finite float can never reach. Compute every number you state.
@@ -195,7 +260,9 @@ Informational with the mitigating factor named.
 
 ```
 references/   methodology, arithmetic+liveness, gas+loops, per-type catalogs,
-              kub (KAP standards), examples (upstreams to diff forks against)
+              kub (KAP standards), postmortems (checks from real 2024-2026
+              incidents), examples (upstreams to diff forks against, plus the
+              OpenZeppelin known-vulnerable-version table)
 report/       gen_report.py (JSON -> HTML + validator), example.findings.json
 scripts/      scan.py (recon), slither_to_findings.py (import)
 .claude/      /audit and /audit-report slash commands
