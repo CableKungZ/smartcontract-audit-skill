@@ -11,7 +11,7 @@ report showing the vulnerable code in red and the fix in green.**
 [![Skill](https://img.shields.io/badge/Claude%20Code-Skill-d97757?style=flat-square)](https://docs.claude.com/en/docs/claude-code/skills)
 [![Python](https://img.shields.io/badge/python-3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#requirements)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-2f855a?style=flat-square)](#requirements)
-[![Chains](https://img.shields.io/badge/chains-EVM%20%2B%20KUB-627eea?style=flat-square)](references/kub.md)
+[![Chains](https://img.shields.io/badge/chains-EVM%20%2B%20KUB-627eea?style=flat-square)](skills/smartcontract-audit/references/kub.md)
 
 </div>
 
@@ -22,7 +22,7 @@ report showing the vulnerable code in red and the fix in green.**
 Point it at a Solidity contract and it runs a structured audit: recon → catalog
 walk → concrete exploit scenarios → severity classification → HTML report.
 
-- **10 vulnerability catalogs**, one per contract type, each with real incidents
+- **12 vulnerability catalogs**, one per contract type, each with real incidents
   and the exact code pattern to look for.
 - **Mandatory arithmetic & liveness pass** — narrowing casts that truncate
   silently in Solidity 0.8, accumulators that overflow their type, and every way
@@ -33,8 +33,14 @@ walk → concrete exploit scenarios → severity classification → HTML report.
   layer that would be a Critical finding anywhere else and is expected here.
 - **Fork diffing** — a table of upstream implementations to diff against,
   because most fork exploits are one changed constant.
+- **Value accounting** — where every unit of value ends up, whether pricing
+  parameters are per-item or global-mutable, and whether capital is placed
+  somewhere participants can never reach it.
+- **Reproducible runs** — the skill pins `model: opus` and `effort: high` in
+  frontmatter, so two audits of the same contract start from the same footing.
 - **HTML report** — one file, no assets, no network, light/dark aware, prints to
-  PDF, with the vulnerable code in red and the recommended fix in green.
+  PDF, with the vulnerable code in red and the recommended fix in green, plus
+  analysis tables and a sequenced remediation roadmap.
 
 ## Install
 
@@ -103,25 +109,26 @@ Severity buckets: **Critical / High / Medium / Low / Informational**, aligned
 with the [Immunefi classification system](https://immunefi.com/immunefi-vulnerability-severity-classification-system-v2-3)
 and Code4rena/Sherlock practice. Impact first, then adjusted for likelihood and
 privilege required — the full rubric is in
-[`references/methodology.md`](references/methodology.md).
+[`references/methodology.md`](skills/smartcontract-audit/references/methodology.md).
 
 ## Catalogs
 
 | Contract type | Catalog | Covers |
 |---|---|---|
-| Staking, farms, veToken, LST, NFT staking | [`staking.md`](references/staking.md) | reward accounting, stake/unstake rounding loops, locks, withdrawal queues |
-| Tokens — ERC-20/721/1155/4626, KAP | [`token.md`](references/token.md) | mint control, honeypot taxes, permit, rebasing, vault-share inflation |
-| Lending, borrowing, CDP | [`lending.md`](references/lending.md) | interest accrual, health factors, liquidation, bad debt, empty-market donation |
-| Vaults, perps, bridges, oracles | [`defi.md`](references/defi.md) | oracle manipulation, strategy losses, flash loans, cross-chain replay |
-| AMM, routers, aggregators | [`swap.md`](references/swap.md) | slippage/deadline, `k` invariant, V3 callback auth, MEV |
-| LP accounting, zaps, V3 managers | [`liquidity.md`](references/liquidity.md) | first-depositor inflation, share rounding, LP pricing |
-| Wallets, 4337/7702, timelocks | [`wallet.md`](references/wallet.md) | signature replay, threshold bypass, delegatecall, recovery |
-| Launchpad, governance, airdrop, marketplace | [`misc.md`](references/misc.md) | refund paths, flash-loan voting, merkle leaves, auction griefing |
-| **Every audit** | [`arithmetic.md`](references/arithmetic.md) | overflow, truncation, precision, **and contract bricking** |
-| **Every audit** | [`gas.md`](references/gas.md) | unbounded loops, gas griefing, optimization |
-| **Every audit** | [`methodology.md`](references/methodology.md) | severity rubric, general EVM catalog, per-chain notes |
-| Reference | [`examples.md`](references/examples.md) | upstreams to diff forks against, libraries, security corpora |
-| KUB Chain | [`kub.md`](references/kub.md) | KAP-20/721/1155/22, `adminTransfer`, KYC gating, chain notes |
+| Staking, farms, veToken, LST, NFT staking | [`staking.md`](skills/smartcontract-audit/references/staking.md) | reward accounting, stake/unstake rounding loops, locks, withdrawal queues |
+| Tokens — ERC-20/721/1155/4626, KAP | [`token.md`](skills/smartcontract-audit/references/token.md) | mint control, honeypot taxes, permit, rebasing, vault-share inflation |
+| Lending, borrowing, CDP | [`lending.md`](skills/smartcontract-audit/references/lending.md) | interest accrual, health factors, liquidation, bad debt, empty-market donation |
+| Vaults, perps, bridges, oracles | [`defi.md`](skills/smartcontract-audit/references/defi.md) | oracle manipulation, strategy losses, flash loans, cross-chain replay |
+| AMM, routers, aggregators | [`swap.md`](skills/smartcontract-audit/references/swap.md) | slippage/deadline, `k` invariant, V3 callback auth, MEV |
+| LP accounting, zaps, V3 managers | [`liquidity.md`](skills/smartcontract-audit/references/liquidity.md) | first-depositor inflation, share rounding, LP pricing |
+| Wallets, 4337/7702, timelocks | [`wallet.md`](skills/smartcontract-audit/references/wallet.md) | signature replay, threshold bypass, delegatecall, recovery |
+| Launchpad, governance, airdrop, marketplace | [`misc.md`](skills/smartcontract-audit/references/misc.md) | refund paths, flash-loan voting, merkle leaves, auction griefing |
+| Anything that distributes value | [`economics.md`](skills/smartcontract-audit/references/economics.md) | value map, admin levers, unreachable liquidity, sequenced remediation |
+| **Every audit** | [`arithmetic.md`](skills/smartcontract-audit/references/arithmetic.md) | overflow, truncation, precision, **and contract bricking** |
+| **Every audit** | [`gas.md`](skills/smartcontract-audit/references/gas.md) | unbounded loops, gas griefing, optimization |
+| **Every audit** | [`methodology.md`](skills/smartcontract-audit/references/methodology.md) | severity rubric, general EVM catalog, per-chain notes |
+| Reference | [`examples.md`](skills/smartcontract-audit/references/examples.md) | upstreams to diff forks against, libraries, security corpora |
+| KUB Chain | [`kub.md`](skills/smartcontract-audit/references/kub.md) | KAP-20/721/1155/22, `adminTransfer`, KYC gating, chain notes |
 
 ## KUB Chain / Bitkub
 
@@ -138,7 +145,7 @@ KUB is EVM-compatible, so the whole methodology applies — what differs is the
 The correct output is **not** "Critical: admin can move user funds" — it is a
 scoped centralization finding. And any DeFi protocol on KUB that accepts
 arbitrary KAP-20 tokens inherits every one of those tokens' committees as a
-trusted party. See [`references/kub.md`](references/kub.md).
+trusted party. See [`references/kub.md`](skills/smartcontract-audit/references/kub.md).
 
 Source: [docs.kubchain.com](https://docs.kubchain.com/quickstart/launching-a-token-on-kub/kap-token-interfaces).
 
@@ -148,6 +155,7 @@ Source: [docs.kubchain.com](https://docs.kubchain.com/quickstart/launching-a-tok
 |---|---|
 | `scripts/scan.py` | Regex recon: external surface + modifiers, every loop with its bound, every narrowing cast, every division, 19 risk patterns each pointing at the relevant catalog. `--json` for machine output. |
 | `scripts/slither_to_findings.py` | Converts `slither --json` into draft findings, mapped one severity level *below* what Slither claims, every entry `Unverified` until a human confirms it. |
+| `scripts/linkcheck.py` | Verifies every reference URL still resolves — a report citing a 404 is a report the reader stops trusting. Exit code = dead links, so it drops into CI. |
 | `report/gen_report.py` | `findings.json` → self-contained HTML. `--validate` checks schema, duplicate ids, severity/id-prefix mismatch, leftover `Unverified`, `TODO` recommendations, missing summary or trust assumptions. |
 | `/audit <path>` | Runs the whole workflow end to end. |
 | `/audit-report [json] [html]` | Validates and regenerates the report. |
@@ -158,6 +166,7 @@ Every script is stdlib-only and has a `--selftest`:
 S=skills/smartcontract-audit
 python $S/scripts/scan.py --selftest
 python $S/scripts/slither_to_findings.py --selftest
+python $S/scripts/linkcheck.py --selftest
 python $S/report/gen_report.py --selftest
 ```
 
@@ -212,6 +221,7 @@ skills/smartcontract-audit/
     gas.md                      loops, gas griefing, optimization
     staking.md  token.md  lending.md  defi.md
     swap.md  liquidity.md  wallet.md  misc.md
+    economics.md                value map, admin levers, unreachable liquidity
     kub.md                      KAP standards, KUB chain notes
     examples.md                 upstreams, libraries, security corpora
   report/
@@ -220,6 +230,7 @@ skills/smartcontract-audit/
   scripts/
     scan.py                     recon pass
     slither_to_findings.py      Slither import
+    linkcheck.py                reference-URL checker
 ```
 
 ## Scope & honesty

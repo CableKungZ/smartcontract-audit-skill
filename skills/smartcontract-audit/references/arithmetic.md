@@ -64,9 +64,66 @@ column can be exceeded is a finding.
 - **Exponentiation.** `a ** b` overflows fast. Compound-interest loops
   (`for (i=0; i<n; i++) x = x * rate / 1e18`) with an unbounded `n` both
   overflow and burn unbounded gas.
-- **Decimal mismatch.** Multiplying an 18-decimal amount by a 6-decimal amount
-  without normalizing produces a value 1e12 off — often into overflow territory,
-  and always into a wrong-value finding.
+- **Decimal mismatch.** See the dedicated section below — it is the most common
+  source of silently-wrong money in multi-token contracts.
+
+### Decimals — normalize before you do anything else
+
+ERC-20 `decimals()` is **not** part of the mandatory standard and is **not**
+always 18. Real, widely-held tokens ship 6 (USDC, USDT), 8 (WBTC), 2, 0, and 24.
+Nothing prevents a token from returning a different value than it did yesterday
+if `decimals()` is not immutable. Any contract that touches two tokens, or that
+lets an admin swap a token address, must normalize.
+
+**Where it goes wrong:**
+
+- **Hardcoded `1e18`** anywhere a token amount is scaled — `amount * price / 1e18`,
+  `PRECISION = 1e18`, `MIN_DEPOSIT = 1e18`. Correct for WETH, off by 1e12 for
+  USDC. Grep for `1e18`, `1 ether`, and `10**18` and check each against the
+  token that actually flows through that line.
+- **Comparing or adding amounts of two different tokens** without scaling both
+  to a common basis. `require(amountIn >= amountOut)` across a 6-decimal and an
+  18-decimal token is meaningless.
+- **Price feeds have their own decimals**, independent of both tokens. Chainlink
+  USD feeds are usually 8 and ETH-quoted feeds 18 — but read `decimals()` from
+  the aggregator rather than assuming, and do it per feed.
+- **`decimals()` read once and cached** at deploy while the token address is
+  mutable — or read from a token that does not implement it at all, so the call
+  reverts (or, via a low-level call, silently returns nothing and decodes as 0).
+- **Normalizing by scaling down first** (`amount / 10**(18 - d)`) truncates.
+  Scale **up** to the common basis, do the arithmetic, then scale down once at
+  the end — and watch the intermediate against the overflow rules above.
+- **Fee, threshold and minimum constants expressed in token units.** A
+  `minFee = 1e18` is 1 USDC-worth of nothing if the fee token is 6-decimal, and
+  a `dustThreshold` calibrated for 18 decimals will treat real balances of an
+  8-decimal token as dust — or never trigger at all.
+- **A configurable fee token.** If an admin can change which token fees are paid
+  in, every constant calibrated for the old token is now wrong. This is a real
+  finding, not a hypothetical: it silently changes fee amounts by orders of
+  magnitude the moment the setter is used.
+
+**What to recommend:**
+
+- Read `decimals()` from each token **at the point of use**, or store it
+  alongside the token address in the same struct and re-read it whenever the
+  address is set. Never assume, never hardcode.
+- Normalize to a single internal basis (18 is the conventional choice) at the
+  boundary — on the way in and on the way out — so all internal math works in
+  one unit. Use `SafeCast` and `Math.mulDiv` for the conversion, since
+  `amount * 10**(18 - d)` is exactly the intermediate-overflow case above.
+- Express fees in **basis points of the amount**, not in absolute token units,
+  so they are decimals-independent by construction. Where an absolute minimum
+  really is needed, store it per token and set it when the token is registered.
+- Reject tokens whose `decimals()` is above 18 (or handle them explicitly) — the
+  scale-up conversion overflows quickly and most codebases never test it.
+- Emit the decimals used in the event, or at minimum in the registration event,
+  so an integrator can detect a mismatch off-chain.
+
+**How to file it.** Severity follows the money it moves: a fee or price
+computed with the wrong scale is usually High or Critical because it is off by
+a factor of 10^n in someone's favour, silently, on every call. A cosmetic
+mismatch in a view or an event is Informational. Say which token and which line
+in the finding, and give the corrected expression in the `fix` block.
 
 ### Precision (the other half of the same read)
 

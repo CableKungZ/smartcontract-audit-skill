@@ -2,6 +2,8 @@
 description: Full security audit of a Solidity contract or directory, ending in an HTML report
 argument-hint: <path-to-contract-or-dir> [chain] [type]
 allowed-tools: Read, Grep, Glob, Bash, Write, Edit
+model: opus
+effort: high
 ---
 
 Run a complete smart contract security audit of: **$ARGUMENTS**
@@ -53,6 +55,7 @@ Then every type catalog that applies — most contracts are two types at once
 | LP accounting, shares, zaps, V3 managers | `liquidity.md` |
 | multisig, 4337/7702, timelock, vesting, custodial | `wallet.md` |
 | launchpad/IDO, governance, airdrop, marketplace | `misc.md` |
+| **any protocol that distributes value** (launchpad, curve sale, fee split, settlement) | `economics.md` |
 | **anything on KUB Chain** | `kub.md` (on top of the type catalog) |
 
 If the contract is a fork, find its upstream in `examples.md` and **diff it
@@ -72,7 +75,7 @@ For each item: is it reachable here? Write the exploit as **concrete steps with
 numbers**. If you can't, it is Informational or not a finding. Drop what doesn't
 apply — do not pad.
 
-Four passes are mandatory whatever the type:
+Five passes are mandatory whatever the type:
 
 1. **Arithmetic** (`arithmetic.md`) — every narrowing cast (silent truncation in
    0.8), every denominator's minimum value, every monotonic accumulator against
@@ -83,6 +86,9 @@ Four passes are mandatory whatever the type:
 3. **Loops & gas** (`gas.md`) — for every loop: who controls the bound, and what
    dies past the block gas limit.
 4. **Centralization** — every privileged function, who holds it, loss on compromise.
+5. **Value accounting** (`economics.md`) — where every unit ends up, whether
+   pricing parameters are per-item or global-mutable, and whether any capital
+   is placed somewhere participants can never reach it. Compute the numbers.
 
 ## 5. Classify
 
@@ -102,6 +108,9 @@ highlight the exact lines.
 python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py --validate findings.json
 python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py findings.json report.html
 ```
+
+End the report with the sequenced remediation stages from `economics.md` §5 —
+a flat list of fixes leaves the team to guess the order.
 
 Fix every validator warning before shipping. Then tell the user the counts by
 severity and the single most important thing to fix first.

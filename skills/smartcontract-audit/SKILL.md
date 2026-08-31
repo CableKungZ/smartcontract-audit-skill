@@ -11,9 +11,40 @@ description: >
   a mandatory arithmetic/overflow/liveness pass, a loop & gas pass, reference
   implementations to diff forks against, and chain-specific notes including
   KUB Chain / KAP standards.
+model: opus
+effort: high
+license: MIT
 ---
 
 # Smart Contract Audit
+
+## Run conditions — do not audit below these
+
+This skill sets `model: opus` and `effort: high` in its frontmatter so every run
+starts from the same footing. Two audits of the same contract should reach the
+same findings, and they only do if the reasoning budget is the same.
+
+- **Effort must be `high` or above.** Drop to `low`/`medium` and the five
+  mandatory passes in step 3 get skimmed — the failures that go missing first
+  are exactly the ones that need arithmetic carried through: type-range
+  overflow, rounding direction, and the "can this revert forever" question.
+  For a contract holding significant value, or one where the money map in
+  `economics.md` is non-trivial, raise it to `xhigh`.
+- **If the frontmatter override did not apply** — an org `availableModels`
+  allowlist can exclude a model, in which case the session keeps its own — say
+  so in the report's method section rather than silently producing a thinner
+  audit. The reader needs to know what produced it.
+- **Never run the audit in a subagent** unless the user asks. The catalogs plus
+  the contract need to sit in one context; splitting them is how cross-cutting
+  findings (a rounding bug that only matters because of an unbounded loop) get
+  lost between agents.
+- **Do not sample.** Read every in-scope file end to end. "Reviewed the main
+  contract" is not an audit, and partial coverage must be stated in Scope.
+- **Record what produced the report.** Put the model, effort level, tool
+  versions (`solc`, `slither`) and the commit hash in the report's method
+  section, so a re-run can be compared against it.
+
+These are the reproducibility conditions. Everything below assumes them.
 
 ## Workflow
 
@@ -54,6 +85,7 @@ farm is staking + token; a vault is liquidity + defi).
 | LP mint/burn, share math, zaps, V3 liquidity managers | `references/liquidity.md` |
 | Multisig, smart accounts (4337/7702), timelocks, vesting, custodial wallets | `references/wallet.md` |
 | Launchpad/IDO, governance/DAO, airdrop/merkle, NFT marketplace | `references/misc.md` |
+| Any protocol that distributes value — launchpad, curve sale, fee split, settlement | `references/economics.md` |
 | **Anything deployed on KUB Chain / Bitkub** | `references/kub.md` (**always**, on top of the type catalog) |
 
 **Always load, regardless of type:**
@@ -83,7 +115,7 @@ For each item: is it reachable in *this* code? Construct a concrete failure
 scenario — **inputs → wrong state / loss, with numbers**. If you can't write it,
 it is Informational or not a finding. Drop what doesn't apply; don't pad.
 
-Four passes are mandatory whatever the contract type:
+Five passes are mandatory whatever the contract type:
 
 1. **Arithmetic** (`arithmetic.md`) — every narrowing cast (silent truncation in
    0.8), every denominator's minimum value, every monotonic accumulator against
@@ -97,6 +129,10 @@ Four passes are mandatory whatever the contract type:
    (BNB, Polygon, KUB) this is a real attack, not a theoretical one.
 4. **Centralization** — every privileged function, the address holding it,
    whether it is an EOA / multisig / timelock, and the loss on compromise.
+5. **Value accounting** (`economics.md`) — the money map: where every unit
+   ends up, whether pricing/settlement parameters are snapshotted per item or
+   read from mutable globals, and whether capital is placed somewhere the
+   finite float can never reach. Compute every number you state.
 
 ### 4. Classify
 

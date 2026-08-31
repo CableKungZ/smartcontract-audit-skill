@@ -2,6 +2,7 @@
 description: Regenerate the HTML report from an existing findings.json
 argument-hint: [findings.json] [output.html]
 allowed-tools: Read, Bash, Edit
+effort: medium
 ---
 
 Regenerate the audit report. Findings file: **${1:-findings.json}**, output:

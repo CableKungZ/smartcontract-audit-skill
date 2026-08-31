@@ -63,6 +63,12 @@ PATTERNS = [
      "can permanently brick admin functions", "arithmetic.md"),
     ("push-in-loop",   r"\.push\s*\(",
      "who can grow this array, and is it looped over?", "gas.md"),
+    ("hardcoded-1e18", r"\b(1e18|1 ether|10\s*\*\*\s*18)\b",
+     "hardcoded 18 decimals -- wrong for USDC(6)/WBTC(8); normalize instead",
+     "arithmetic.md"),
+    ("decimals-call",  r"\.decimals\s*\(",
+     "read per token at point of use; never cache across a mutable address",
+     "arithmetic.md"),
 ]
 
 FUNC = re.compile(

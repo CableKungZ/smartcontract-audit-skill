@@ -15,6 +15,29 @@ findings.json shape (everything except `findings` is optional):
   "scope":    ["contracts/Staking.sol", "contracts/Rewards.sol"],
   "summary":  "Two paragraphs of executive summary. Markdown-lite.",
   "trust_assumptions": ["Owner is a 3/5 Gnosis Safe", "Reward token is trusted"],
+
+  // Optional. Free-form analysis sections rendered after the findings:
+  // economic analysis, peer benchmarking, parameter appendices, method notes.
+  // Each has a title, optional markdown-lite body, and an optional table.
+  "sections": [
+    {
+      "title": "Capital efficiency — stranded value",
+      "body": "Prose, **bold**, `code`, - bullets.",
+      "table": {
+        "headers": ["Dump scenario", "KUB left", "Stranded %"],
+        "rows": [["Float only", "881.8", "37.4%"]],
+        "highlight": 2            // optional: emphasise this column (0-based)
+      }
+    }
+  ],
+
+  // Optional. Tiered remediation roadmap, rendered last. Tier 0 is the gate.
+  "roadmap": [
+    {"tier": "0 (gate)", "scope": "Value-extraction levers",
+     "fixes": "Burn the residual; snapshot params; cap the fee",
+     "closes": ["C-01", "C-02", "H-01"], "outcome": "Safe to operate"}
+  ],
+
   "findings": [
     {
       "id": "C-01",
@@ -141,10 +164,83 @@ color:var(--muted);font-weight:600;margin:14px 0 4px}
 .crit{--sev:var(--crit)}.high{--sev:var(--high)}.medi{--sev:var(--medi)}
 .low{--sev:var(--low)}.info{--sev:var(--info)}
 a{color:inherit}
+.tw{overflow-x:auto;margin:0 0 14px}
+th.hi,td.hi{color:var(--crit);font-weight:600}
+.an{background:var(--card);border:1px solid var(--line);border-radius:10px;
+padding:20px 22px;margin-bottom:16px}
+.an h3{margin:0 0 10px}
+.an table{margin-top:4px}
+.rm{display:flex;flex-direction:column;gap:12px}
+.tier{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line);
+border-radius:10px;padding:16px 20px}
+.tier.gate{border-left-color:var(--crit)}
+.th{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:8px}
+.th b{font-size:16px}
+.th span{color:var(--muted)}
+.th em{font-style:normal;font-size:11px;font-weight:700;text-transform:uppercase;
+letter-spacing:.06em;color:var(--crit);border:1px solid var(--crit);
+border-radius:99px;padding:2px 9px}
+.cl{font-size:13px;color:var(--muted)}
+.cl a{font:12px ui-monospace,monospace;border:1px solid var(--line);
+border-radius:4px;padding:1px 5px;text-decoration:none;margin-right:3px}
+.oc{font-size:13px;font-weight:600;margin:0}
 footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
 font-size:12px;color:var(--muted)}
 @media print{body{background:#fff}.f,.meta,.tally div{break-inside:avoid}}
 """
+
+
+def table_html(t):
+    """Render {headers, rows, highlight?} as a scrollable table."""
+    hi = t.get("highlight")
+    head = "".join(
+        f'<th{" class=hi" if hi == i else ""}>{inline(h)}</th>'
+        for i, h in enumerate(t.get("headers") or []))
+    body = "".join(
+        "<tr>" + "".join(
+            f'<td{" class=hi" if hi == i else ""}>{inline(c)}</td>'
+            for i, c in enumerate(row)) + "</tr>"
+        for row in t.get("rows") or [])
+    return (f'<div class="tw"><table><thead><tr>{head}</tr></thead>'
+            f"<tbody>{body}</tbody></table></div>")
+
+
+def sections_html(sections):
+    out = []
+    for s in sections:
+        out.append('<section class="an">')
+        if s.get("title"):
+            out.append(f'<h3>{inline(s["title"])}</h3>')
+        if s.get("body"):
+            out.append(md(s["body"]))
+        if s.get("table"):
+            out.append(table_html(s["table"]))
+        out.append("</section>")
+    return "".join(out)
+
+
+def roadmap_html(rows):
+    """Tiered remediation roadmap. The first tier is rendered as the gate."""
+    out = ['<div class="rm">']
+    for i, r in enumerate(rows):
+        gate = i == 0
+        out.append(f'<div class="tier{" gate" if gate else ""}">')
+        out.append('<div class="th">'
+                   f'<b>Tier {inline(r.get("tier", i))}</b>'
+                   f'<span>{inline(r.get("scope", ""))}</span>'
+                   + ('<em>hard gate</em>' if gate else "") + "</div>")
+        if r.get("fixes"):
+            out.append(md(r["fixes"]))
+        closes = r.get("closes") or []
+        if closes:
+            out.append('<p class="cl">Closes: ' + " ".join(
+                f'<a href="#{html.escape(str(c))}">{html.escape(str(c))}</a>'
+                for c in closes) + "</p>")
+        if r.get("outcome"):
+            out.append(f'<p class="oc">→ {inline(r["outcome"])}</p>')
+        out.append("</div>")
+    out.append("</div>")
+    return "".join(out)
 
 
 def code_block(src, kind):
@@ -236,6 +332,10 @@ def build(d):
                  "".join(f"<li>{inline(x)}</li>" for x in d["trust_assumptions"]) + "</ul>")
     s.append("<h2>Detailed findings</h2>")
     s.append("".join(finding_html(f) for f in findings) or "<p>No findings reported.</p>")
+    if d.get("sections"):
+        s.append("<h2>Analysis</h2>" + sections_html(d["sections"]))
+    if d.get("roadmap"):
+        s.append("<h2>Remediation roadmap</h2>" + roadmap_html(d["roadmap"]))
     s.append("<footer>This report covers only the code and commit listed in Scope. "
              "It is not a guarantee that the code is free of vulnerabilities.</footer></div>")
     return ('<!doctype html><html><head><meta charset="utf-8">'
@@ -343,6 +443,19 @@ def _selftest():
     assert '<b>1</b><span>Critical</span>' in doc and '<b>0</b><span>High</span>' in doc
     assert doc.index('<div class="wrap">') > doc.index("<body>")  # wrap not stranded in <head>
     assert doc.count("<style>") == 1
+
+    doc2 = build({"project": "p", "findings": [],
+                  "sections": [{"title": "Stranded <x>", "body": "**b**",
+                                "table": {"headers": ["A", "B"],
+                                          "rows": [["1", "2"]], "highlight": 1}}],
+                  "roadmap": [{"tier": "0", "scope": "levers", "fixes": "burn it",
+                               "closes": ["C-01"], "outcome": "safe"},
+                              {"tier": "1", "scope": "gov"}]})
+    assert "Stranded &lt;x&gt;" in doc2
+    assert '<th class=hi>B</th>' in doc2 and '<td class=hi>2</td>' in doc2
+    assert doc2.count('<div class="tier') == 2
+    assert '<div class="tier gate">' in doc2 and doc2.count("hard gate") == 1
+    assert '<a href="#C-01">C-01</a>' in doc2
     e, w = validate({"findings": [
         {"id": "C-01", "title": "t", "severity": "Nope"},
         {"id": "C-01", "title": "t", "severity": "Critical"},

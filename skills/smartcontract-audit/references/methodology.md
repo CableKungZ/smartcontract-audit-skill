@@ -26,16 +26,62 @@ Notes:
 
 ## Process
 
-1. Fix scope: exact files, exact commit hash. Everything else is out of scope and
-   noted as a trust assumption (libraries, oracles, tokens, admin keys).
+1. Fix scope: exact files, exact commit hash (or the verified on-chain address).
+   Everything else is out of scope and noted as a trust assumption (libraries,
+   oracles, tokens, admin keys, the compiler).
 2. Build the mental model: roles & permissions table, value-flow diagram (deposit
-   → accounting → withdraw → rewards), external-call inventory.
+   → accounting → withdraw → rewards), external-call inventory, and — for
+   anything that distributes value — the money map in `economics.md` §1.
 3. Line-by-line read of in-scope code. Then walk this file + the type-specific
-   catalog as a checklist.
+   catalogs as a checklist.
 4. For every candidate: write the exploit path as concrete steps with values. If
    you can't, it's probably Info or not a finding.
-5. Classify, then write description / impact / recommendation.
-6. Generate the HTML report.
+5. **Verify by trying to refute** (below), then de-duplicate.
+6. Classify, then write description / impact / recommendation.
+7. Generate the HTML report, ending in a tiered remediation roadmap
+   (`economics.md` §5).
+
+## Audit dimensions
+
+Read across dimensions, not just across files, and **say in the report which
+dimensions you covered** — it tells the reader what was not covered:
+
+1. **Access control** — who can call what, and what a compromised key costs.
+2. **Core protocol logic** — the state machine: deposit/withdraw, settlement,
+   graduation, liquidation, whatever this contract's critical transition is.
+3. **Economics & value extraction** — where the money ends up (`economics.md`).
+4. **Low-level Solidity safety** — arithmetic, casts, reentrancy, external
+   calls, gas (`arithmetic.md`, `gas.md`).
+5. **Domain mathematics** — curve math, share math, tick math, interest math.
+
+## Verification: refute before you report
+
+A candidate finding is not a finding until you have **tried to kill it**.
+Re-check each one specifically against the things that would make it false:
+
+- checked arithmetic in Solidity ≥0.8 (does it revert rather than wrap?),
+- a modifier or `require` further up the call path that you missed,
+- the token actually in use (a clean OpenZeppelin ERC-20 has no transfer hooks;
+  a `.transfer()` payout to an EOA is fine, to a contract it is not),
+- whether the caller you assumed can actually reach that state,
+- whether the "attacker" is in fact a trusted role, which changes the severity
+  rather than removing the finding.
+
+Then **de-duplicate**: several symptoms of one root cause are **one** finding
+with several `location`s, not several findings. Report both counts in the
+methodology section — "N verified, M distinct after de-duplication" tells the
+reader that padding was removed, not added.
+
+A finding that survives a deliberate attempt to refute it is worth reporting.
+One that doesn't gets dropped, or filed as Informational with the mitigating
+factor named.
+
+## Quantify economic claims
+
+Never write "some value is stranded" or "the operator takes a large share".
+Compute it from the actual on-chain parameters, put the parameters in an
+appendix table, state the method (simulation, closed form, on-chain read), and
+let the team reproduce the number. See `economics.md` §3.
 
 ## General EVM vulnerability catalog
 

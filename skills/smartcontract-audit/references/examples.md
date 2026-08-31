@@ -25,14 +25,14 @@ Battle-tested contracts to compare an audited contract against. Two uses:
 | Solady | https://github.com/Vectorized/solady | Extremely optimized assembly. Same caveat, more so. |
 | PRBMath | https://github.com/PaulRBerg/prb-math | Fixed-point math with overflow-safe `mulDiv`, `exp`, `log`. |
 | Uniswap `FullMath` | https://github.com/Uniswap/v3-core/blob/main/contracts/libraries/FullMath.sol | 512-bit `mulDiv` — the standard fix for "intermediate overflows before division". |
-| Chainlink contracts | https://github.com/smartcontractkit/chainlink/tree/develop/contracts | `AggregatorV3Interface`, and the L2 sequencer-uptime feed example. |
+| Chainlink contracts | https://github.com/smartcontractkit/chainlink-evm/tree/develop/contracts | `AggregatorV3Interface`, and the L2 sequencer-uptime feed example. |
 
 ## Staking
 
 | Project | Where | Read it for |
 |---|---|---|
-| Synthetix `StakingRewards` | https://github.com/Synthetixio/synthetix/blob/v2.101.3/contracts/StakingRewards.sol | The canonical `rewardPerToken` / `notifyRewardAmount` pattern. ~90% of single-token staking contracts are forks of this — diff against it. |
-| SushiSwap `MasterChef` | https://github.com/sushiswap/sushiswap/blob/master/protocols/masterchef/contracts/MasterChef.sol | The `accRewardPerShare` / `rewardDebt` pattern, and the `add()`-without-`massUpdatePools` bug and the `migrator` rug vector — both still present in forks today. |
+| Synthetix `StakingRewards` | https://docs.synthetix.io/contracts/source/contracts/stakingrewards | The canonical `rewardPerToken` / `notifyRewardAmount` pattern. ~90% of single-token staking contracts are forks of this — diff against it. |
+| SushiSwap `MasterChef` | https://github.com/sushiswap/masterchef/blob/master/contracts/MasterChef.sol | The `accRewardPerShare` / `rewardDebt` pattern, and the `add()`-without-`massUpdatePools` bug and the `migrator` rug vector — both still present in forks today. |
 | `MasterChefV2` | same repo | The corrected version; use it to show what the fix looks like. |
 | Curve `VotingEscrow` (veCRV) | https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy | The reference lock/decay (slope-bias) math. Vyper. |
 | Lido `stETH` | https://github.com/lidofinance/lido-dao | Rebasing LST, share accounting, oracle-reported balances, withdrawal queue. |
@@ -57,7 +57,7 @@ Battle-tested contracts to compare an audited contract against. Two uses:
 | Uniswap V4 | https://github.com/Uniswap/v4-core | Hooks and the singleton/flash-accounting model — a different threat surface (hook permissions, unlock callbacks). |
 | Curve StableSwap | https://github.com/curvefi/curve-contract | `get_D`/`get_y` Newton iteration, amplification ramp, and the read-only-reentrancy history. |
 | Balancer V2 Vault | https://github.com/balancer/balancer-v2-monorepo | Singleton vault accounting; a useful contrast when auditing a custom pool. |
-| 1inch Aggregation Router | https://github.com/1inch/1inch-contracts | Arbitrary-call routing done with allowlisting — the pattern to compare a custom router against. |
+| 1inch Aggregation Router | https://github.com/1inch/limit-order-protocol | Arbitrary-call routing done with allowlisting — the pattern to compare a custom router against. |
 
 ## Lending / DeFi
 
@@ -87,7 +87,7 @@ Battle-tested contracts to compare an audited contract against. Two uses:
 | Resource | Where | Use |
 |---|---|---|
 | SWC Registry | https://swcregistry.io | Stable IDs (`SWC-107` reentrancy, `SWC-128` DoS-by-gas-limit) to cite in findings. |
-| Smart Contract Weakness / DASP | https://dasp.co | Older but still-used taxonomy. |
+| Smart Contract Security Field Guide | https://scsfg.io | Modern, maintained taxonomy — the practical replacement for the old DASP top-10. |
 | Damn Vulnerable DeFi | https://github.com/theredguild/damn-vulnerable-defi | Each challenge is a real bug class in minimal form — the fastest way to calibrate on flash-loan, oracle and reentrancy attacks. |
 | Ethernaut | https://github.com/OpenZeppelin/ethernaut | Fundamentals: delegatecall, storage layout, `tx.origin`, uninitialized proxies. |
 | Solodit | https://solodit.xyz | Aggregated findings from Code4rena, Sherlock, Spearbit, Trail of Bits — search by contract type before starting an audit to see what auditors actually found in similar code. |

@@ -5,12 +5,128 @@
   "commit": "a1b2c3d",
   "date": "2026-08-31",
   "auditor": "Claude Code",
-  "scope": ["contracts/StakingPool.sol", "contracts/RewardToken.sol"],
+  "scope": [
+    "contracts/StakingPool.sol",
+    "contracts/RewardToken.sol"
+  ],
   "summary": "Review of a single-token staking pool with a Synthetix-style reward distributor, deployed on KUB Chain.\n\nOne Critical and one High issue were found in reward accounting, plus a centralization finding inherent to the KAP-20 reward token. Fixing C-01 requires a redeploy; the pool holds user principal and reward funds in the same balance.",
   "trust_assumptions": [
     "`owner` is a 3/5 multisig; a single-EOA owner would raise M-01 to High.",
     "The KAP-20 reward token's `Committee` address is out of scope and is trusted not to call `adminTransfer` against the pool.",
     "Compiler `solc 0.8.24`, no unchecked blocks outside the audited ones."
+  ],
+  "sections": [
+    {
+      "title": "Method & verification",
+      "body": "Reviewed across five dimensions: access control, reward-settlement logic, value accounting, low-level Solidity safety, and reward-curve mathematics.\n\nEvery candidate finding was re-checked with the goal of refuting it — accounting for checked arithmetic in solc 0.8.24, the clean OpenZeppelin ERC-20 with no transfer hooks, and the 2300-gas `.transfer` semantics on the payout path. **13 verified findings, 8 distinct after de-duplication**, reported most-severe first.\n\nProduced with `model: opus`, `effort: high`, `solc 0.8.24`, Slither 0.10.x, at commit `a1b2c3d`."
+    },
+    {
+      "title": "Reward solvency under load",
+      "body": "The pool's solvency invariant is `rewardToken.balanceOf(this) >= totalStaked + rewardRate * DURATION`. Because C-01 funds rewards from the shared balance, the invariant is already violated at deployment. Simulated over one reward period at the configured rate:",
+      "table": {
+        "headers": [
+          "Scenario",
+          "Reward reserve required",
+          "Actual balance",
+          "Shortfall"
+        ],
+        "rows": [
+          [
+            "No stakers",
+            "34,560 TOKEN",
+            "34,560 TOKEN",
+            "0"
+          ],
+          [
+            "100k TOKEN staked",
+            "34,560 TOKEN",
+            "34,560 TOKEN",
+            "100,000 TOKEN (principal)"
+          ],
+          [
+            "1M TOKEN staked",
+            "34,560 TOKEN",
+            "34,560 TOKEN",
+            "1,000,000 TOKEN (principal)"
+          ]
+        ],
+        "highlight": 3
+      }
+    },
+    {
+      "title": "Appendix A — parameters used",
+      "body": "Every quantitative claim above traces back to these values, read from the deployed contract at the audited commit.",
+      "table": {
+        "headers": [
+          "Parameter",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Compiler",
+            "solc 0.8.24"
+          ],
+          [
+            "DURATION",
+            "30 days"
+          ],
+          [
+            "PRECISION",
+            "1e12"
+          ],
+          [
+            "`UserInfo.rewardDebt` type",
+            "uint128 (max ~3.4e38)"
+          ],
+          [
+            "Owner",
+            "3/5 multisig, no timelock"
+          ],
+          [
+            "Reward token == stake token",
+            "yes"
+          ],
+          [
+            "Fee token",
+            "owner-settable; decimals not read"
+          ]
+        ]
+      }
+    }
+  ],
+  "roadmap": [
+    {
+      "tier": "0 (gate)",
+      "scope": "Fund safety",
+      "fixes": "Separate the reward reserve from staked principal and assert solvency on every top-up. Settle rewards before `emergencyWithdraw` zeroes the stake. Replace the unbounded `stakers[]` loop with the existing pull path.\n\nWhile any of these is open the pool is not safe to operate with user funds.",
+      "closes": [
+        "C-01",
+        "H-01",
+        "H-02"
+      ],
+      "outcome": "Principal is safe and always withdrawable"
+    },
+    {
+      "tier": "1",
+      "scope": "Correctness & governance",
+      "fixes": "`SafeCast` on every narrowing write plus `Math.mulDiv` for the intermediate. Express fees in basis points and read `decimals()` per token instead of hardcoding 1e18. Exclude both token addresses explicitly from `recoverERC20` rather than relying on them coinciding. Add a timelock to the owner multisig.",
+      "closes": [
+        "M-01",
+        "M-02",
+        "M-03"
+      ],
+      "outcome": "No silent state corruption; key compromise is survivable"
+    },
+    {
+      "tier": "2",
+      "scope": "Portability & observability",
+      "fixes": "Move reward accrual from `block.number` to `block.timestamp` with a per-second rate. Emit events on every privileged setter.",
+      "closes": [
+        "L-01",
+        "I-01"
+      ],
+      "outcome": "Advertised APR holds across chains; changes are monitorable"
+    }
   ],
   "findings": [
     {
@@ -24,7 +140,9 @@
       "fix": "+uint256 public rewardReserve;\n\n+function depositRewards(uint256 amount) external {\n+    rewardToken.safeTransferFrom(msg.sender, address(this), amount);\n+    rewardReserve += amount;\n+}\n\n function notifyRewardAmount() external onlyOwner {\n+    uint256 reward = rewardReserve;\n     rewardRate = reward / DURATION;\n+    require(\n+        rewardToken.balanceOf(address(this)) >= totalStaked + rewardRate * DURATION,\n+        \"insolvent\"\n+    );\n     lastUpdateTime = block.timestamp;\n     periodFinish = block.timestamp + DURATION;\n }",
       "impact": "All staked principal is scheduled for distribution as rewards. Early claimers withdraw other users' deposits; the last users to withdraw find the pool empty. Total loss of deposited funds, no attacker privilege required beyond calling `claim()` first.",
       "recommendation": "Track the reward reserve explicitly: `uint256 public rewardReserve;` incremented in a `depositRewards(uint256)` function that pulls tokens via `safeTransferFrom`, and compute `reward = rewardReserve` in `notifyRewardAmount`. Additionally assert solvency: `require(rewardToken.balanceOf(address(this)) >= totalStaked + rewardRate * DURATION)`.",
-      "references": ["https://docs.synthetix.io/contracts/source/contracts/stakingrewards"]
+      "references": [
+        "https://docs.synthetix.io/contracts/source/contracts/stakingrewards"
+      ]
     },
     {
       "id": "H-01",
@@ -59,7 +177,9 @@
       "fix": " // Pull pattern: O(1) per user, no loop, cannot be griefed.\n+function claim() external nonReentrant {\n+    _updateReward(msg.sender);\n+    uint256 amount = pending[msg.sender];\n+    pending[msg.sender] = 0;\n+    rewardToken.safeTransfer(msg.sender, amount);\n+}\n\n // If a loop is unavoidable, paginate and cache the bound:\n+function distribute(uint256 start, uint256 end) external onlyOwner {\n+    uint256 len = stakers.length;\n+    if (end > len) end = len;\n+    for (uint256 i = start; i < end;) {\n+        pending[stakers[i]] += share(stakers[i]);\n+        unchecked { ++i; }\n+    }\n+}",
       "impact": "Once the array passes the gas-limit threshold, `distribute()` reverts on every call and can never succeed again — rewards are permanently undistributable. The array cannot shrink, so there is no recovery without an upgrade. Attacker cost is a few dollars in gas; damage is the full reward reserve.",
       "recommendation": "Replace push distribution with the pull pattern already present in `_updateReward` — users claim their own rewards in O(1) and no loop over stakers is needed. If a loop must stay, paginate it (`distribute(uint256 start, uint256 end)`), cache `stakers.length` outside the loop, and use `unchecked { ++i; }`.",
-      "references": ["https://swcregistry.io/docs/SWC-128"]
+      "references": [
+        "https://swcregistry.io/docs/SWC-128"
+      ]
     },
     {
       "id": "M-02",
@@ -72,7 +192,24 @@
       "fix": " struct UserInfo {\n     uint128 amount;\n+    uint256 rewardDebt;   // not packed; correctness over one slot\n }\n\n+// or, if packing must be kept, make the truncation revert:\n+user.rewardDebt = SafeCast.toUint128(\n+    Math.mulDiv(user.amount, accRewardPerShare, PRECISION)\n+);",
       "impact": "A wrapped `rewardDebt` makes `pending = accrued - rewardDebt` underflow and revert, freezing that user's claim and withdrawal path, or — if it wraps the other way — pays out rewards that were never funded. Rated Medium because it requires a large supply and long accrual; High for a token above ~1e30 total supply.",
       "recommendation": "Use `SafeCast.toUint128` on every narrowing write so truncation reverts instead of corrupting state, and use `Math.mulDiv` for the intermediate so `amount * accRewardPerShare` cannot overflow before the division. Widening `rewardDebt` to `uint256` is the simpler fix and costs one extra storage slot.",
-      "references": ["https://docs.openzeppelin.com/contracts/5.x/api/utils#SafeCast"]
+      "references": [
+        "https://docs.openzeppelin.com/contracts/5.x/api/utils#SafeCast"
+      ]
+    },
+    {
+      "id": "M-03",
+      "title": "Fee math hardcodes 18 decimals — wrong for any 6- or 8-decimal fee token",
+      "severity": "Medium",
+      "status": "Open",
+      "location": "StakingPool.sol:118, 244",
+      "description": "`setFeeToken(address)` lets the owner change which token performance fees are collected in, but the fee calculation scales by a hardcoded `1e18` and the minimum-fee constant is expressed in absolute token units.\n\n`decimals()` is not part of the mandatory ERC-20 standard and is not always 18: USDC and USDT are 6, WBTC is 8. The moment the fee token is set to any of them the maths is off by a factor of 1e12 or 1e10 — silently, with no revert.",
+      "code": " uint256 public constant MIN_FEE = 1e18;   // assumes 18 decimals\n\n function _collectFee(uint256 amount) internal {\n-    uint256 fee = amount * feeRate / 1e18;\n-    require(fee >= MIN_FEE, \"fee too small\");\n     feeToken.safeTransfer(treasury, fee);\n }",
+      "fix": " // Fees in basis points are decimals-independent by construction.\n+uint256 public constant FEE_BPS_DENOMINATOR = 10_000;\n+mapping(address => uint256) public minFeeOf;   // per token, set on registration\n\n+function setFeeToken(address token) external onlyOwner {\n+    uint8 d = IERC20Metadata(token).decimals();\n+    require(d <= 18, \"unsupported decimals\");\n+    feeToken = IERC20(token);\n+    feeTokenDecimals = d;\n+    emit FeeTokenUpdated(token, d);       // integrators can detect the change\n+}\n\n function _collectFee(uint256 amount) internal {\n+    uint256 fee = Math.mulDiv(amount, feeRateBps, FEE_BPS_DENOMINATOR);\n+    require(fee >= minFeeOf[address(feeToken)], \"fee too small\");\n     feeToken.safeTransfer(treasury, fee);\n }",
+      "impact": "With a 6-decimal fee token the computed fee is 1e12x too small, so the treasury collects effectively nothing and `MIN_FEE` can never be satisfied — every fee-collecting call reverts, blocking the path that depends on it. With a token of more than 18 decimals the scale-up overflows. No funds are stolen, but fees are either uncollectable or the path is bricked, and nothing signals it. Rated Medium because it requires the owner to use the setter; it becomes High the first time they do.",
+      "recommendation": "Express the fee in basis points of the amount rather than in a scaled absolute unit — that removes the decimals dependency entirely. Read `decimals()` from the token in `setFeeToken` and store it beside the address so it can never go stale, reject anything above 18, keep the minimum-fee threshold per token, and emit the decimals in the event so integrators can detect the change. Use `Math.mulDiv` so the intermediate cannot overflow before the division.",
+      "references": [
+        "https://docs.openzeppelin.com/contracts/5.x/api/utils#Math-mulDiv-uint256-uint256-uint256-"
+      ]
     },
     {
       "id": "L-01",

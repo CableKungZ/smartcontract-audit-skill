@@ -1,3 +1,7 @@
+# confidential client material used only as local training input — never commit
+Training/
+*.CONFIDENTIAL.md
+
 # audit working files — never commit a client's findings or report
 findings.json
 draft.findings.json
