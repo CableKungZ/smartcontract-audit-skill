@@ -164,6 +164,28 @@ Seven passes are mandatory whatever the type:
 Use the rubric in `methodology.md`. Impact first, then adjust for likelihood and
 privilege. Downgrade only when a *concrete* precondition gates the exploit.
 
+## 5b. Prove it, then review yourself (hard only)
+
+**Every Critical and High needs a runnable PoC** — a Foundry test that fails on
+the unfixed code and passes on the fix. Paste the real command and its real
+output into the finding's `poc` field; `--validate` errors out on a Critical or
+High that has neither `poc` nor `poc_waiver` (waivers: a centralization finding
+needing a privileged key, a repo with no test harness, an off-chain
+precondition). Use the `TESTS` section of the scan output to know which of those
+applies, and put its invariant/fuzz counts in the report's method section.
+
+Then answer the five self-review questions from `methodology.md` for every
+finding and record the outcome in `review_note`:
+
+1. What precondition makes this *not* exploitable?
+2. Does something else in the repo already block it? (grep every caller)
+3. Does the PoC fail on the unfixed code and pass on the fix?
+4. Would the fix break another caller?
+5. Is the severity still right after 1–4?
+
+Drop what fails 1 or 2 explicitly — delete it, or keep it as Informational with
+the mitigating factor named. Never silently.
+
 ## 6. Write `findings.json` and generate the report (hard only)
 
 Shape is documented at the top of `SKILL_DIR/report/gen_report.py`;

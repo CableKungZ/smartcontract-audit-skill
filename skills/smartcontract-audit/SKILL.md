@@ -223,7 +223,25 @@ pick the lower one only if a *concrete* precondition (trusted role, oracle
 failure, specific ordering) gates the exploit. "Unlikely in practice" is not a
 precondition.
 
-### 5. Write `findings.json`, validate, generate
+### 5. Prove it, then review yourself
+
+**Every Critical and High needs a runnable PoC.** Write a Foundry test that
+fails against the unfixed code and passes against the fix, and paste the real
+command and its real output into the finding's `poc` field
+(`{"file": …, "command": …, "output": …}`). The validator refuses to generate a
+report where a Critical or High has neither a `poc` nor a `poc_waiver`. A
+finding you cannot reproduce is an opinion.
+
+If the repo has no test harness, `scan.py`'s `TESTS` section says so — write the
+PoC against a minimal `forge init` scaffold, or use `poc_waiver` and recommend a
+harness. The same section's invariant/fuzz counts belong in the report's method
+section, with the specific invariants this contract needs where there are none.
+
+Then run **the self-review pass** — the five questions in
+`references/methodology.md` — against every finding, and record the outcome in
+`review_note`. Drop what fails, explicitly, never silently.
+
+### 6. Write `findings.json`, validate, generate
 
 ```
 python report/gen_report.py --validate findings.json   # fix every warning
@@ -237,7 +255,9 @@ PDF cleanly.
 
 The validator's warnings are shipping blockers: a missing executive summary,
 missing trust assumptions, a leftover `Unverified` status, a `TODO`
-recommendation, or a duplicate id all mean the report isn't done.
+recommendation, or a duplicate id all mean the report isn't done. A Critical or
+High with no `poc` and no `poc_waiver` is a hard **error**, not a warning — the
+report will not generate.
 
 ## Writing findings
 

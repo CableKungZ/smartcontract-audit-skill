@@ -76,6 +76,42 @@ A finding that survives a deliberate attempt to refute it is worth reporting.
 One that doesn't gets dropped, or filed as Informational with the mitigating
 factor named.
 
+### The self-review pass (run it on every finding before writing the report)
+
+Answer all five, one line each. This is the last gate before the report ships,
+and it is where a gated exploit gets downgraded — by you, not by the client's
+dev team after delivery.
+
+1. **What precondition makes this *not* exploitable?** Name it, or state
+   explicitly that there is none.
+2. **Does something else in this repo already block it?** Grep every caller of
+   the function, not just the one you found it in — the same reflex as fixing a
+   bug at its root. A guard one frame up kills the finding.
+3. **Does the PoC actually fail on the unfixed code, and pass on the fix?**
+   If there is no PoC, does the waiver survive question 1?
+4. **Would the recommended fix break another caller?** A recommendation that
+   breaks a working path is a finding you are introducing.
+5. **Is the severity still right after 1–4?** Re-derive it from the rubric,
+   don't defend the number you wrote first.
+
+Record the outcome in the finding's `review_note` — the surviving precondition,
+or what you checked. Drop a finding that fails 1 or 2 **explicitly**: either
+delete it, or keep it as Informational with the mitigating factor named. Never
+delete silently — a finding that is dropped and then rediscovered by someone
+else is worse than one filed as Informational.
+
+### A finding you cannot reproduce is an opinion
+
+Every **Critical** and **High** ships with a runnable proof: a Foundry test that
+fails against the unfixed code and passes against the fix, with the real command
+and its real output pasted into the finding's `poc` field. `--validate` refuses
+to generate the report otherwise.
+
+The only accepted waivers (`poc_waiver`, and each still needs question 1
+answered): a centralization finding that requires a privileged key, a repo with
+no test harness at all (say so, and recommend one), or a precondition that is
+genuinely off-chain. "It was obvious from reading" is not a waiver.
+
 ## Quantify economic claims
 
 Never write "some value is stranded" or "the operator takes a large share".

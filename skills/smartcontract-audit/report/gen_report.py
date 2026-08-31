@@ -50,6 +50,22 @@ findings.json shape (everything except `findings` is optional):
       "recommendation": "Specific code-level fix.",
       "code": "function withdraw(uint256 a) external {\\n    ...\\n}",
       "fix":  "function withdraw(uint256 a) external nonReentrant {\\n    ...\\n}",
+
+      // REQUIRED on every Critical and High: a runnable proof. A finding you
+      // cannot reproduce is an opinion. `output` is the real failing output,
+      // pasted, not paraphrased.
+      "poc": {
+        "file": "test/PoC_C01.t.sol",
+        "command": "forge test --mt test_PoC_C01 -vvv",
+        "output": "[FAIL] test_PoC_C01()\\n  attacker balance: 0 -> 412.5 ETH"
+      },
+      // ...or, when a PoC is genuinely impossible (centralization findings, no
+      // test harness in the repo, an off-chain precondition), say why:
+      "poc_waiver": "Centralization: requires the owner key, not reproducible.",
+
+      // Optional. The outcome of the self-review pass — the precondition that
+      // gates this, or what was checked before keeping it at this severity.
+      "review_note": "Reachable from any caller; no guard elsewhere in the repo.",
       "references": ["https://..."]
     }
   ]
@@ -106,12 +122,14 @@ CSS = """
 :root{--bg:#f7f7f6;--card:#fff;--ink:#1b1b1a;--muted:#6b6b68;--line:#e2e2df;
 --crit:#b3261e;--high:#c2410c;--medi:#a16207;--low:#0e7490;--info:#57534e;
 --bad:#b3261e;--bad-bg:#fdeceb;--bad-b:#f2c4c0;
---good:#12693f;--good-bg:#e9f6ee;--good-b:#b8ddc7;}
+--good:#12693f;--good-bg:#e9f6ee;--good-b:#b8ddc7;
+--poc:#0e7490;--poc-bg:#e6f4f7;--poc-b:#b6dbe4;}
 @media(prefers-color-scheme:dark){:root{--bg:#141414;--card:#1c1c1b;--ink:#eceae5;
 --muted:#9a9a95;--line:#2e2e2c;--crit:#f2705f;--high:#f59e6b;--medi:#e0b355;
 --low:#5cc5d8;--info:#a8a29e;
 --bad:#f2705f;--bad-bg:#331b19;--bad-b:#5c2b26;
---good:#5fd497;--good-bg:#15291f;--good-b:#26543c;}}
+--good:#5fd497;--good-bg:#15291f;--good-b:#26543c;
+--poc:#5cc5d8;--poc-bg:#14262b;--poc-b:#25454e;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
 font:15px/1.65 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -134,6 +152,13 @@ letter-spacing:.08em;padding:7px 14px;border-bottom:1px solid var(--line)}
 .blk.bad>b{background:var(--bad-bg);color:var(--bad);border-bottom-color:var(--bad-b)}
 .blk.good{border-color:var(--good-b)}
 .blk.good>b{background:var(--good-bg);color:var(--good);border-bottom-color:var(--good-b)}
+.blk.poc{border-color:var(--poc-b)}
+.blk.poc>b{background:var(--poc-bg);color:var(--poc);border-bottom-color:var(--poc-b)}
+.blk.poc .cmd{display:block;padding:10px 14px 0;font:12px ui-monospace,monospace;color:var(--poc)}
+.rv{font-size:13px;color:var(--muted);border-left:2px solid var(--line);
+padding:2px 0 2px 12px;margin:0 0 14px}
+.nopoc{font-size:12px;color:var(--muted);border:1px dashed var(--line);
+border-radius:8px;padding:9px 12px;margin:0 0 14px}
 .ln{display:block;padding:0 14px;margin:0 -14px}
 .ln.d{background:var(--bad-bg);box-shadow:inset 3px 0 var(--bad)}
 .ln.a{background:var(--good-bg);box-shadow:inset 3px 0 var(--good)}
@@ -259,6 +284,22 @@ def code_block(src, kind):
             + "".join(lines) + "</code></pre></div>")
 
 
+def poc_block(p):
+    """Render a proof of concept: the command, then its real output."""
+    cmd = str(p.get("command") or "").strip()
+    out = str(p.get("output") or "").rstrip("\n")
+    where = str(p.get("file") or "").strip()
+    label = "Proof of concept" + (f" &middot; {html.escape(where)}" if where else "")
+    body = ""
+    if cmd:
+        body += f'<span class="cmd">$ {html.escape(cmd)}</span>'
+    if out:
+        lines = "".join(f'<span class="ln">{html.escape(l) or "&nbsp;"}</span>'
+                        for l in out.split("\n"))
+        body += f"<pre><code>{lines}</code></pre>"
+    return f'<div class="blk poc"><b>{label}</b>{body}</div>'
+
+
 def finding_html(f):
     sev = f.get("severity", "Informational")
     k = SEV_KEY.get(sev, "info")
@@ -279,6 +320,13 @@ def finding_html(f):
         parts.append('<div class="lbl">Recommendation</div>' + md(f["recommendation"]))
     if f.get("fix"):
         parts.append(code_block(f["fix"], "good"))
+    if f.get("poc"):
+        parts.append(poc_block(f["poc"]))
+    elif f.get("poc_waiver"):
+        parts.append(f'<p class="nopoc">No proof of concept: '
+                     f'{inline(f["poc_waiver"])}</p>')
+    if f.get("review_note"):
+        parts.append(f'<p class="rv">{inline(f["review_note"])}</p>')
     refs = f.get("references") or []
     if refs:
         links = "".join(f'<li><a href="{html.escape(r)}">{html.escape(r)}</a></li>' for r in refs)
@@ -389,6 +437,18 @@ def validate(d):
             warns.append(f"{who}: recommendation is not specific enough")
         if f.get("fix") and not f.get("code"):
             warns.append(f"{who}: has `fix` but no `code` — show what is being fixed")
+        poc = f.get("poc")
+        if poc and not (poc.get("command") or poc.get("output")):
+            errs.append(f"{who}: `poc` needs at least a `command` or its `output`")
+        if sev in ("Critical", "High") and not poc:
+            if f.get("poc_waiver"):
+                warns.append(f"{who}: {sev} with no PoC — waiver accepted, "
+                             f"state it in the report")
+            else:
+                errs.append(
+                    f"{who}: {sev} findings need a runnable `poc` "
+                    f"(file/command/output) or a `poc_waiver` saying why one is "
+                    f"impossible. A finding you cannot reproduce is an opinion.")
     return errs, warns
 
 
@@ -443,6 +503,18 @@ def _selftest():
     assert '<b>1</b><span>Critical</span>' in doc and '<b>0</b><span>High</span>' in doc
     assert doc.index('<div class="wrap">') > doc.index("<body>")  # wrap not stranded in <head>
     assert doc.count("<style>") == 1
+    # PoC gate: a High with neither poc nor waiver is an error, a waiver is a warning
+    e, _ = validate({"findings": [{"id": "H-9", "title": "t", "severity": "High"}]})
+    assert any("poc" in x for x in e), e
+    e2, w2 = validate({"findings": [{"id": "H-9", "title": "t", "severity": "High",
+                                     "poc_waiver": "needs the owner key"}]})
+    assert not e2 and any("waiver" in x for x in w2), (e2, w2)
+    e3, _ = validate({"findings": [{"id": "H-9", "title": "t", "severity": "High",
+                                    "poc": {"command": "forge test"}}]})
+    assert not e3, e3
+    pd = poc_block({"file": "test/P.t.sol", "command": "forge test --mt x",
+                    "output": "line1\nline2"})
+    assert "forge test --mt x" in pd and pd.count("class=\"ln\"") == 2, pd
 
     doc2 = build({"project": "p", "findings": [],
                   "sections": [{"title": "Stranded <x>", "body": "**b**",

@@ -11,6 +11,7 @@ every hit still has to be read in context. It finds nothing on its own.
 Sections printed:
   files       loc, pragma, licence, imports (which library + version pinned?)
   surface     external/public functions, their modifiers, payable, view
+  tests       the project's own harness: unit / fuzz / invariant counts
   type        which catalogs to load, inferred from identifiers in the code,
               plus a name-vs-body check (a file called Token.sol that stakes)
   risk        one line per pattern hit, grouped -- see PATTERNS below
@@ -259,7 +260,82 @@ def collect(target):
     return out
 
 
-def report(results):
+TEST_MARKERS = ("foundry.toml", "hardhat.config.js", "hardhat.config.ts",
+                "truffle-config.js", "remappings.txt", "package.json")
+
+
+def test_survey(target):
+    """Does this project test itself, and does it test the right things?
+
+    Walks up from the target for a project root, then counts test files and,
+    more importantly, invariant/fuzz tests -- the only kind that catches the
+    arithmetic and custody failures the catalogs are about.
+    """
+    root = os.path.abspath(target if os.path.isdir(target)
+                           else os.path.dirname(target))
+    for _ in range(6):
+        if any(os.path.exists(os.path.join(root, m)) for m in TEST_MARKERS):
+            break
+        parent = os.path.dirname(root)
+        if parent == root:
+            return None
+        root = parent
+    else:
+        return None
+
+    harness = [m for m in TEST_MARKERS if os.path.exists(os.path.join(root, m))]
+    files, unit, fuzz, invariant, forktest = [], 0, 0, 0, 0
+    for dirpath, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in
+                   ("node_modules", ".git", "out", "cache", "artifacts", "lib")]
+        for n in sorted(names):
+            if not (n.endswith((".t.sol", ".test.ts", ".test.js", ".spec.ts"))
+                    or n.startswith("test_")):
+                continue
+            path = os.path.join(dirpath, n)
+            files.append(os.path.relpath(path, root).replace("\\", "/"))
+            try:
+                src = open(path, encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            invariant += len(re.findall(r"\bfunction\s+invariant\w*\s*\(", src))
+            fuzz += len(re.findall(r"\bfunction\s+testFuzz\w*\s*\(", src))
+            unit += len(re.findall(r"\bfunction\s+test\w*\s*\(", src)) + \
+                len(re.findall(r"\bit\s*\(\s*[\"']", src))
+            forktest += len(re.findall(r"createSelectFork|vm\.rollFork", src))
+    return {"root": root.replace("\\", "/"), "harness": harness,
+            "files": files, "unit": unit - fuzz, "fuzz": fuzz,
+            "invariant": invariant, "fork": forktest}
+
+
+def tests_section(w, t):
+    w("\n=== TESTS (does the project catch its own bugs?) ===\n")
+    if not t:
+        w("  no project root found -- state in the report that test coverage"
+          " was not assessed\n")
+        return
+    if not t["harness"]:
+        w("  no test harness at all\n")
+    else:
+        w(f"  harness: {', '.join(t['harness'])}   ({t['root']})\n")
+    w(f"  {len(t['files'])} test file(s): {t['unit']} unit, {t['fuzz']} fuzz, "
+      f"{t['invariant']} invariant, {t['fork']} fork-test\n")
+    if not t["files"]:
+        w("  -> NO TESTS. Every finding in this audit is un-regression-tested;"
+          " say so in the report.\n")
+    if t["invariant"] == 0:
+        w("  -> no invariant tests: the arithmetic and custody passes have no"
+          " safety net. Recommend the specific invariants this contract needs"
+          " (solvency, principal-always-withdrawable, supply-vs-custody).\n")
+    if t["fuzz"] == 0:
+        w("  -> no fuzz tests: boundary bugs (the Cetus class) are invisible to"
+          " unit tests at realistic magnitudes -- see references/postmortems.md\n")
+    if t["files"] and t["fork"] == 0:
+        w("  -> no fork tests: integrations with live protocols are only tested"
+          " against mocks\n")
+
+
+def report(results, tests=None):
     w = sys.stdout.write
     total_loc = sum(r["loc"] for r in results)
     w(f"\n{len(results)} file(s), {total_loc} lines\n")
@@ -362,6 +438,8 @@ def report(results):
             w(f"  {r['file']}: lines " +
               ", ".join(str(x) for x in r["division_lines"]) + "\n")
 
+    tests_section(w, tests)
+
     w("\nNext: read the code. This scan proves nothing.\n\n")
 
 
@@ -402,6 +480,17 @@ contract T {
     # body mints -- exactly the mismatch the name-vs-body section must catch
     assert "token.md" not in r["name_signals"], r["name_signals"]  # T.sol
     assert r["contracts"] == ["T"], r["contracts"]
+
+    # test survey: a foundry project with one unit and one fuzz test
+    root = os.path.dirname(p)
+    open(os.path.join(root, "foundry.toml"), "w").write("[profile.default]\n")
+    os.makedirs(os.path.join(root, "test"), exist_ok=True)
+    open(os.path.join(root, "test", "A.t.sol"), "w").write(
+        "contract AT { function test_a() public {}"
+        " function testFuzz_b(uint256 x) public {} }")
+    t = test_survey(root)
+    assert t and t["harness"] == ["foundry.toml"], t
+    assert (t["unit"], t["fuzz"], t["invariant"]) == (1, 1, 0), t
     print("selftest ok")
 
 
@@ -415,4 +504,8 @@ if __name__ == "__main__":
         res = collect(args[0])
         if not res:
             sys.exit(f"no .sol files under {args[0]}")
-        print(json.dumps(res, indent=2)) if "--json" in args else report(res)
+        t = test_survey(args[0])
+        if "--json" in args:
+            print(json.dumps({"files": res, "tests": t}, indent=2))
+        else:
+            report(res, t)

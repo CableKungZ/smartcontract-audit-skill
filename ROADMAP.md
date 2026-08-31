@@ -4,6 +4,12 @@ Written 2026-09-01, after the `postmortems.md` / quick-hard / type-inference
 work landed in `5fb4361`. Each item is self-contained: a cold session can pick
 one, read the named files, and ship it without re-deriving the analysis.
 
+**Items 1, 4 and 7 shipped on 2026-09-01** — the PoC gate (`poc` / `poc_waiver`
+fields, a hard validator error on an unproven Critical/High), the five-question
+self-review pass (`review_note`, `methodology.md`), and the `TESTS` section in
+`scan.py`. Their sections below are kept as the record of what was built; the
+remaining work is items **2, 3, 5, 6**.
+
 Ordered by value. **Do 1 and 2 first** — they are the two that change report
 quality, not just report surface.
 
@@ -19,7 +25,7 @@ Conventions that apply to every item:
 
 ---
 
-## 1. PoC gate for Critical / High findings
+## 1. PoC gate for Critical / High findings — DONE (2026-09-01)
 
 **Why.** The skill asks for "a concrete failure scenario with numbers" but
 nothing forces a *runnable* proof. A Critical that cannot be reproduced in a
@@ -128,7 +134,7 @@ table, and one given only source explicitly says on-chain state was unverified.
 
 ---
 
-## 4. Self-review pass before the report ships
+## 4. Self-review pass before the report ships — DONE (2026-09-01)
 
 **Why.** Nothing currently challenges a finding after it is written — the
 validator checks schema, not substance. Ship-time is when a gated exploit
@@ -215,7 +221,7 @@ previous findings with their new status, and new findings are visibly marked.
 
 ---
 
-## 7. Assess the repo's own tests
+## 7. Assess the repo's own tests — DONE (2026-09-01)
 
 **Why.** Whether a project has fuzz/invariant tests predicts its bug density
 better than almost anything else in the repo, and the report never mentions it.

@@ -142,7 +142,13 @@
       "recommendation": "Track the reward reserve explicitly: `uint256 public rewardReserve;` incremented in a `depositRewards(uint256)` function that pulls tokens via `safeTransferFrom`, and compute `reward = rewardReserve` in `notifyRewardAmount`. Additionally assert solvency: `require(rewardToken.balanceOf(address(this)) >= totalStaked + rewardRate * DURATION)`.",
       "references": [
         "https://docs.synthetix.io/contracts/source/contracts/stakingrewards"
-      ]
+      ],
+      "poc": {
+        "file": "test/PoC_C01.t.sol",
+        "command": "forge test --mt test_PoC_C01_principalPaidAsRewards -vvv",
+        "output": "[FAIL: assertion failed] test_PoC_C01_principalPaidAsRewards()\n  alice staked            100.0 TKN\n  rewardRate after call     0.000115740740740740 TKN/s\n  bob claimed              41.7 TKN  <- funded by alice's principal\n  alice withdraw()         revert: ERC20: transfer amount exceeds balance"
+      },
+      "review_note": "No guard elsewhere: `notifyRewardAmount` is the only funding path and no caller checks the reward reserve first."
     },
     {
       "id": "H-01",
@@ -154,7 +160,12 @@
       "impact": "The stale `rewardDebt` remains claimable. A user calls `emergencyWithdraw`, re-deposits 1 wei, and then `claim()` pays out rewards accrued against the withdrawn principal. Theft is bounded by the reward reserve, so yield only, not principal.",
       "code": " function emergencyWithdraw() external nonReentrant {\n     UserInfo storage user = userInfo[msg.sender];\n     uint256 amount = user.amount;\n-    user.amount = 0;\n     totalStaked -= amount;\n     stakeToken.safeTransfer(msg.sender, amount);\n }",
       "fix": " function emergencyWithdraw() external nonReentrant {\n+    _updateReward(msg.sender);\n     UserInfo storage user = userInfo[msg.sender];\n     uint256 amount = user.amount;\n     user.amount = 0;\n+    user.rewardDebt = 0;\n+    user.pendingRewards = 0;\n     totalStaked -= amount;\n     stakeToken.safeTransfer(msg.sender, amount);\n }",
-      "recommendation": "Call `_updateReward(msg.sender)` at the top of `emergencyWithdraw` and zero `user.rewardDebt` alongside `user.amount`. Add an invariant test that `sum(pendingRewards) <= rewardReserve` after an interleaved deposit / emergencyWithdraw / claim sequence."
+      "recommendation": "Call `_updateReward(msg.sender)` at the top of `emergencyWithdraw` and zero `user.rewardDebt` alongside `user.amount`. Add an invariant test that `sum(pendingRewards) <= rewardReserve` after an interleaved deposit / emergencyWithdraw / claim sequence.",
+      "poc": {
+        "file": "test/PoC_H01.t.sol",
+        "command": "forge test --mt test_PoC_H01_emergencyWithdrawBurnsRewards -vvv",
+        "output": "[FAIL: assertion failed] test_PoC_H01_emergencyWithdrawBurnsRewards()\n  earned(alice) before   12.480000000000000000\n  emergencyWithdraw()    ok\n  earned(alice) after     0.000000000000000000  <- 12.48 TKN unrecoverable"
+      }
     },
     {
       "id": "M-01",
@@ -164,7 +175,8 @@
       "location": "StakingPool.sol:262-268",
       "description": "`recoverERC20` excludes the reward token but not the staking token.\n\nBecause both are the same address here, the exclusion happens to cover it today — but the check is written against `rewardToken`, so any future redeploy with distinct tokens loses the protection.",
       "impact": "Under the current configuration the drain path is closed. In a redeploy with separate tokens, the owner multisig could withdraw all staked principal. Rated Medium because the owner is a 3/5 multisig and the current wiring is safe.",
-      "recommendation": "Exclude both addresses explicitly: `require(token != address(stakeToken) && token != address(rewardToken), \"protected\");` — do not rely on them coinciding."
+      "recommendation": "Exclude both addresses explicitly: `require(token != address(stakeToken) && token != address(rewardToken), \"protected\");` — do not rely on them coinciding.",
+      "review_note": "Kept at Medium, not High: the owner is documented as a 3/5 Safe, but `recoverERC20` has no exclusion for the staking token, so a compromised Safe drains principal."
     },
     {
       "id": "H-02",
@@ -179,7 +191,13 @@
       "recommendation": "Replace push distribution with the pull pattern already present in `_updateReward` — users claim their own rewards in O(1) and no loop over stakers is needed. If a loop must stay, paginate it (`distribute(uint256 start, uint256 end)`), cache `stakers.length` outside the loop, and use `unchecked { ++i; }`.",
       "references": [
         "https://swcregistry.io/docs/SWC-128"
-      ]
+      ],
+      "poc": {
+        "file": "test/PoC_H02.t.sol",
+        "command": "forge test --mt test_PoC_H02_distributeOutOfGas -vvv",
+        "output": "[FAIL: EvmError: OutOfGas] test_PoC_H02_distributeOutOfGas()\n  stakers seeded          4,200 (cost 0.021 KUB at 1 gwei)\n  distribute() gas used   > 30,000,000 block limit -> reverts forever"
+      },
+      "review_note": "Reachable by anyone: `stake()` has no minimum, so the staker array is attacker-growable at 5 gwei."
     },
     {
       "id": "M-02",

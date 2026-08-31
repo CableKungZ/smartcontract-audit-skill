@@ -40,6 +40,10 @@ walk → concrete exploit scenarios → severity classification → HTML report.
 - **Value accounting** — where every unit of value ends up, whether pricing
   parameters are per-item or global-mutable, and whether capital is placed
   somewhere participants can never reach it.
+- **Proof or it didn't happen** — every Critical and High ships with a runnable
+  Foundry PoC (command + real output) or a stated waiver; the report generator
+  refuses to build without one. Plus a five-question self-review pass that
+  downgrades gated findings before delivery, not after.
 - **Reproducible runs** — the skill pins `model: opus` and `effort: high` in
   frontmatter, so two audits of the same contract start from the same footing.
 - **HTML report** — one file, no assets, no network, light/dark aware, prints to
@@ -131,7 +135,8 @@ privilege required — the full rubric is in
 | Anything that distributes value | [`economics.md`](skills/smartcontract-audit/references/economics.md) | value map, admin levers, unreachable liquidity, sequenced remediation |
 | **Every audit** | [`arithmetic.md`](skills/smartcontract-audit/references/arithmetic.md) | overflow, truncation, precision, **and contract bricking** |
 | **Every audit** | [`gas.md`](skills/smartcontract-audit/references/gas.md) | unbounded loops, gas griefing, optimization |
-| **Every audit** | [`methodology.md`](skills/smartcontract-audit/references/methodology.md) | severity rubric, general EVM catalog, per-chain notes |
+| **Every audit** | [`methodology.md`](skills/smartcontract-audit/references/methodology.md) | severity rubric, general EVM catalog, self-review pass, per-chain notes |
+| **Every audit** | [`postmortems.md`](skills/smartcontract-audit/references/postmortems.md) | checks derived from real 2024-2026 exploits: paired-rounding, wrong overflow checks, donation on fresh markets, cross-chain verifier config, uninitialized proxies, EIP-7702 |
 | Reference | [`examples.md`](skills/smartcontract-audit/references/examples.md) | upstreams to diff forks against, libraries, security corpora |
 | KUB Chain | [`kub.md`](skills/smartcontract-audit/references/kub.md) | KAP-20/721/1155/22, `adminTransfer`, KYC gating, chain notes |
 
@@ -158,10 +163,10 @@ Source: [docs.kubchain.com](https://docs.kubchain.com/quickstart/launching-a-tok
 
 | Tool | What it does |
 |---|---|
-| `scripts/scan.py` | Regex recon: external surface + modifiers, every loop with its bound, every narrowing cast, every division, 27 risk patterns each pointing at the relevant catalog. `--json` for machine output. |
+| `scripts/scan.py` | Regex recon: external surface + modifiers, every loop with its bound, every narrowing cast, every division, 27 risk patterns each pointing at the relevant catalog, the contract type inferred from identifiers (with a name-vs-body check), and the project's own test coverage (unit / fuzz / invariant). `--json` for machine output. |
 | `scripts/slither_to_findings.py` | Converts `slither --json` into draft findings, mapped one severity level *below* what Slither claims, every entry `Unverified` until a human confirms it. |
 | `scripts/linkcheck.py` | Verifies every reference URL still resolves — a report citing a 404 is a report the reader stops trusting. Exit code = dead links, so it drops into CI. |
-| `report/gen_report.py` | `findings.json` → self-contained HTML. `--validate` checks schema, duplicate ids, severity/id-prefix mismatch, leftover `Unverified`, `TODO` recommendations, missing summary or trust assumptions. |
+| `report/gen_report.py` | `findings.json` → self-contained HTML. `--validate` checks schema, duplicate ids, severity/id-prefix mismatch, leftover `Unverified`, `TODO` recommendations, missing summary or trust assumptions, and **errors** on a Critical/High with no runnable PoC and no waiver. |
 | `/audit <path> [quick\|hard]` | `hard` (default) runs the whole workflow end to end and writes the HTML report. `quick` is triage: recon + the catalogs `scan.py` points at, a ranked list in the terminal, labelled as not-an-audit. |
 | `/audit-report [json] [html]` | Validates and regenerates the report. |
 
@@ -195,6 +200,17 @@ python $S/report/gen_report.py --selftest
     "impact": "What an attacker gains / users lose.",
     "recommendation": "Specific code-level fix.",
     "fix":  " function withdraw() external nonReentrant {\n+    balance = 0;\n+    token.safeTransfer(msg.sender, a);\n }",
+
+    // Required on every Critical/High: a proof that runs. Without `poc` or a
+    // `poc_waiver`, --validate errors and the report will not generate.
+    "poc": {
+      "file": "test/PoC_C01.t.sol",
+      "command": "forge test --mt test_PoC_C01 -vvv",
+      "output": "[FAIL] test_PoC_C01()\n  attacker balance: 0 -> 412.5 ETH"
+    },
+    "poc_waiver": "…only when a PoC is genuinely impossible; say why",
+
+    "review_note": "Outcome of the self-review pass: the surviving precondition.",
     "references": ["https://swcregistry.io/docs/SWC-107"]
   }]
 }
