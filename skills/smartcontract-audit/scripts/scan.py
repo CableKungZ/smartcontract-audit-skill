@@ -2,7 +2,6 @@
 """Recon pass over a Solidity codebase. Prints an inventory, not a verdict.
 
     python scripts/scan.py contracts/
-    python scripts/scan.py contracts/ --json > recon.json
 
 This is deliberately dumb: regex over source, no compiler, no dependencies.
 Its job is to give the audit a starting map and a list of lines to read --
@@ -21,7 +20,6 @@ Sections printed:
   math        every division and exponentiation
 """
 
-import json
 import os
 import re
 import sys
@@ -533,8 +531,4 @@ if __name__ == "__main__":
         res = collect(args[0])
         if not res:
             sys.exit(f"no .sol files under {args[0]}")
-        t = test_survey(args[0])
-        if "--json" in args:
-            print(json.dumps({"files": res, "tests": t}, indent=2))
-        else:
-            report(res, t)
+        report(res, test_survey(args[0]))

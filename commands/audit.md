@@ -8,217 +8,24 @@ effort: high
 
 Run a smart contract security audit of: **$ARGUMENTS**
 
-The skill lives at `${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/` — call
-that **SKILL_DIR** below. Every `SKILL_DIR/...` path in this file means that
-directory; resolve it before reading or running anything.
+The skill lives at `${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/` — call it
+**SKILL_DIR**.
 
-Follow `SKILL_DIR/SKILL.md` exactly. Do not skip steps, and do not write a
-single finding before step 4 is done.
+**Read `SKILL_DIR/SKILL.md` and follow it exactly.** It is the single
+description of this workflow: the modes, the seven mandatory passes, which
+catalogs to load, the PoC gate, the self-review pass and the report. Do not skip
+steps, and do not write a single finding before the catalog walk is done.
 
-## 0. Mode
+Two things only this file knows:
 
-`$ARGUMENTS` may contain `quick`, `hard`, or `reaudit <previous.findings.json>`.
+- **Paths.** `SKILL.md` writes script paths relative to its own directory.
+  Prefix each with `${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/`, e.g.
+  `python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/scripts/scan.py <path>`.
+- **Arguments.** `$ARGUMENTS` carries the target path and, optionally, the mode
+  (`quick` / `hard` / `reaudit <previous.findings.json>`), a deployed address
+  (→ load `onchain.md`), and the chain. A previous `findings.json` means
+  reaudit — do not ask. If no mode was given, ask before starting, per
+  SKILL.md's Modes section.
 
-If a previous `findings.json` was supplied, the mode is **reaudit** — do not
-ask. Otherwise: **if the user did not say which, ask before doing anything** — one
-`AskUserQuestion` call, and do not start the scan until it is answered. Never
-pick the mode silently: quick costs a third as much and hard is the only one
-that produces a report, so the choice changes both the bill and the deliverable.
-
-Ask in the same call:
-
-1. **Mode** — `Hard — full audit + HTML report (recommended)` / `Quick — triage
-   list, ~1/3 the tokens, not an audit`.
-2. **Optional steps**, multi-select, each answered Yes/No — offer only the ones
-   that actually apply to this run:
-   - *Slither import* — only if `slither` is on PATH; adds a draft of
-     `Unverified` findings to confirm or drop.
-   - *HTML report* — Yes by default in hard; in quick it is off, and turning it
-     on does **not** upgrade the triage to an audit (the disclaimer still ships).
-   - *Fork diff* — only if the code looks like a fork of something in
-     `examples.md`; diffs it line by line against the upstream tag first.
-   - *Gas pass output* — `forge test --gas-report`, only if `foundry.toml` exists.
-
-Anything the user declines is recorded in the report's Scope as **not
-performed** — a skipped step is a coverage gap, not a silent default.
-
-If the user *did* name a mode, run it without asking, and still ask Yes/No for
-any optional step above that applies.
-
-- **hard** — everything in this file, all seven passes, HTML report.
-- **reaudit** — the user gave a previous `findings.json`. For each old finding,
-  verify the fix in the code and set its status: `Fixed` (name the commit and
-  line), `Open` (say why the fix is incomplete — the most valuable output of a
-  re-audit), or `Acknowledged`. Then run the full hard passes over the changed
-  code, because fixes introduce findings. Generate with
-  `--previous prev.findings.json`, which renders the remediation-status table
-  and marks anything new.
-- **quick** — triage. Run step 1, load only `methodology.md`, `postmortems.md`
-  and the type catalogs `scan.py` actually points at, read only the lines it
-  flags, and stop after step 4 with a **ranked markdown list in the terminal**:
-  one line per suspicion — `file:line — what to check — why`. No
-  `findings.json`, no HTML, no severities you cannot defend.
-
-  End a quick run with this line verbatim:
-
-  > Triage only — catalogs partially loaded, code not read end to end. Not an
-  > audit. Run `/audit <path> hard` before deploying or relying on this.
-
-  Quick may raise an alarm, never clear one: report "nothing found in the
-  flagged lines", never "looks safe". If quick turns up anything that looks
-  Critical or High, stop and tell the user to run hard — do not finish the
-  triage.
-
-## 1. Recon
-
-```
-python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/scripts/scan.py $1
-```
-
-Read the output. It gives you the external surface, every loop with its bound,
-every narrowing cast, every division, and every risk-pattern hit. It proves
-nothing on its own — it tells you which lines to read.
-
-If `slither` is installed, also import a draft:
-
-```
-slither $1 --json slither.json
-python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/scripts/slither_to_findings.py slither.json > draft.findings.json
-```
-
-Every draft entry is `"status": "Unverified"`. Confirm it (rewrite in your own
-words, add a concrete failure scenario, set the real severity) or drop it.
-Never ship an Unverified entry.
-
-## 2. Load the catalogs
-
-Read from `SKILL_DIR/references/`.
-
-If an on-chain **address** was given, also load `onchain.md` and run its
-`cast` checks — deployed bytecode vs the audited source, the real proxy
-implementation and admin, real role holders, configured parameters, messaging
-config, and the block height everything was read at. If no address was given,
-write one sentence in Scope: source only, on-chain state not verified.
-
-**Type comes from the identifiers, not the file name.** Use the `CONTRACT TYPE`
-section of the `scan.py` output from step 1: load every catalog it lists, and
-read the **name-vs-body** lines — a file whose name hides what the body does is
-where findings get missed, and a name that advertises behaviour the body lacks
-means the logic lives in another contract (find it) or is dead code. A name that
-contradicts its own behaviour (`safeX` that is not safe, `totalStaked` that is
-not the sum of stakes) is itself a finding: integrators build against the name.
-
-**Always, whatever the contract is:** `methodology.md`, `arithmetic.md`, `gas.md`,
-`postmortems.md` (checks derived from real 2024-2026 exploits).
-
-Then every type catalog that applies — most contracts are two types at once
-(a farm is staking + token; a vault is liquidity + defi):
-
-| Type | File |
-|---|---|
-| staking, farms, veToken, LST, NFT staking | `staking.md` |
-| ERC-20/721/1155/4626, KAP tokens | `token.md` |
-| lending, borrowing, CDP | `lending.md` |
-| vaults, strategies, perps, bridges, oracles | `defi.md` |
-| AMM, router, aggregator, any internal swap | `swap.md` |
-| LP accounting, shares, zaps, V3 managers | `liquidity.md` |
-| multisig, 4337/7702, timelock, vesting, custodial | `wallet.md` |
-| deposit/withdraw, escrow, wrapped tokens (WETH/KKUB), splitters | `custody.md` |
-| launchpad/IDO, governance, airdrop, marketplace | `misc.md` |
-| **any protocol that distributes value** (launchpad, curve sale, fee split, settlement) | `economics.md` |
-| **anything on KUB Chain** | `kub.md` (on top of the type catalog) |
-
-If the contract is a fork, find its upstream in `examples.md` and **diff it
-line by line first**, and check the upstream's security advisories too. Uranium
-Finance lost $50M to one constant changed in one branch; Balancer V2's 2025
-exploit hit its forks on other chains the same day.
-
-Resolve the **pinned version** of every library (`package-lock.json`, the
-`lib/` submodule commit) and check it against the OpenZeppelin advisory table
-in `examples.md`. A vulnerable version whose affected component is used is a
-finding at the listed severity.
-
-## 3. Read the code end to end
-
-Before any finding, build:
-- a roles & permissions table (who can call what),
-- the value-flow path (deposit → accounting → withdraw → rewards),
-- an inventory of every external call.
-
-## 4. Walk the catalogs as a checklist
-
-For each item: is it reachable here? Write the exploit as **concrete steps with
-numbers**. If you can't, it is Informational or not a finding. Drop what doesn't
-apply — do not pad.
-
-Seven passes are mandatory whatever the type:
-
-1. **Arithmetic** (`arithmetic.md`) — every narrowing cast (silent truncation in
-   0.8), every denominator's minimum value, every monotonic accumulator against
-   its type max, rounding direction on every shares path.
-2. **Liveness** — can any function users need be made to revert forever? Answer
-   the seven positive checks at the end of `arithmetic.md` explicitly. A
-   permanent freeze is Critical, same as theft.
-3. **Loops & gas** (`gas.md`) — for every loop: who controls the bound, and what
-   dies past the block gas limit.
-4. **Centralization** — every privileged function, who holds it, loss on compromise.
-5. **Custody** (`custody.md`) — if it holds anyone else's value: every path
-   value leaves by, its destination, its bound. The operator must not be able
-   to move a user's balance in any case; every supply increase must take
-   custody in the same transaction.
-6. **Incident replay** (`postmortems.md`) — walk its numbered classes against
-   this code; the paired-rounding check and the pinned-library-version check
-   apply to almost everything. Cite the incident in any finding it produces.
-7. **Value accounting** (`economics.md`) — where every unit ends up, whether
-   pricing parameters are per-item or global-mutable, and whether any capital
-   is placed somewhere participants can never reach it. Compute the numbers.
-
-## 5. Classify
-
-Use the rubric in `methodology.md`. Impact first, then adjust for likelihood and
-privilege. Downgrade only when a *concrete* precondition gates the exploit.
-
-## 5b. Prove it, then review yourself (hard only)
-
-**Every Critical and High needs a runnable PoC** — a Foundry test that fails on
-the unfixed code and passes on the fix. Paste the real command and its real
-output into the finding's `poc` field; `--validate` errors out on a Critical or
-High that has neither `poc` nor `poc_waiver` (waivers: a centralization finding
-needing a privileged key, a repo with no test harness, an off-chain
-precondition). Use the `TESTS` section of the scan output to know which of those
-applies, and put its invariant/fuzz counts in the report's method section.
-
-Then answer the five self-review questions from `methodology.md` for every
-finding and record the outcome in `review_note`:
-
-1. What precondition makes this *not* exploitable?
-2. Does something else in the repo already block it? (grep every caller)
-3. Does the PoC fail on the unfixed code and pass on the fix?
-4. Would the fix break another caller?
-5. Is the severity still right after 1–4?
-
-Drop what fails 1 or 2 explicitly — delete it, or keep it as Informational with
-the mitigating factor named. Never silently.
-
-## 6. Write `findings.json` and generate the report (hard only)
-
-Shape is documented at the top of `SKILL_DIR/report/gen_report.py`;
-`SKILL_DIR/report/example.findings.json` is a filled-in sample.
-
-For each finding include `code` (the vulnerable snippet, renders red) and `fix`
-(the recommended snippet, renders green), using `-` / `+` line prefixes to
-highlight the exact lines.
-
-```
-python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py --validate findings.json
-python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py findings.json report.html
-
-# reaudit mode only
-python ${CLAUDE_PLUGIN_ROOT}/skills/smartcontract-audit/report/gen_report.py     --previous prev.findings.json findings.json report.html
-```
-
-End the report with the sequenced remediation stages from `economics.md` §5 —
-a flat list of fixes leaves the team to guess the order.
-
-Fix every validator warning before shipping. Then tell the user the counts by
-severity and the single most important thing to fix first.
+Write `findings.json` and the report next to the audited code unless the user
+says otherwise.

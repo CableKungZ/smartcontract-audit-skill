@@ -286,6 +286,10 @@ Shape is documented at the top of `report/gen_report.py`;
 self-contained HTML file — no assets, no network, light/dark aware, prints to
 PDF cleanly.
 
+End the report with the sequenced remediation stages from `economics.md` §5 — a
+flat list of fixes leaves the team to guess the order. Then tell the user the
+counts by severity and the single most important thing to fix first.
+
 The validator's warnings are shipping blockers: a missing executive summary,
 missing trust assumptions, a leftover `Unverified` status, a `TODO`
 recommendation, or a duplicate id all mean the report isn't done. A Critical or

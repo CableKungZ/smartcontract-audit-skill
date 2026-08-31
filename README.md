@@ -171,7 +171,7 @@ Source: [docs.kubchain.com](https://docs.kubchain.com/quickstart/launching-a-tok
 
 | Tool | What it does |
 |---|---|
-| `scripts/scan.py` | Regex recon: external surface + modifiers, every loop with its bound, every narrowing cast, every division, 27 risk patterns each pointing at the relevant catalog, the contract type inferred from identifiers (with a name-vs-body check), and the project's own test coverage (unit / fuzz / invariant). `--json` for machine output. |
+| `scripts/scan.py` | Regex recon: external surface + modifiers, every loop with its bound, every narrowing cast, every division, 27 risk patterns each pointing at the relevant catalog, the contract type inferred from identifiers (with a name-vs-body check), and the project's own test coverage (unit / fuzz / invariant). |
 | `scripts/slither_to_findings.py` | Converts `slither --json` into draft findings, mapped one severity level *below* what Slither claims, every entry `Unverified` until a human confirms it. |
 | `scripts/linkcheck.py` | Verifies every reference URL still resolves — a report citing a 404 is a report the reader stops trusting. Exit code = dead links, so it drops into CI. |
 | `report/gen_report.py` | `findings.json` → self-contained HTML. `--validate` checks schema, duplicate ids, severity/id-prefix mismatch, leftover `Unverified`, `TODO` recommendations, missing summary or trust assumptions, and **errors** on a Critical/High with no runnable PoC and no waiver. |
