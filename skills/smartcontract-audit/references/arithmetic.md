@@ -14,6 +14,71 @@ sue. Audit arithmetic as a DoS class, not only as a value class.
 
 ---
 
+## 0. Breaking points — find the number, then state expected vs actual
+
+Every arithmetic exploit has an **exact input at which behaviour changes**.
+"This could overflow" is not a finding; "at `amount = 3.41e38` the cast to
+`uint128` wraps and the user's 340 undecillion-wei deposit is recorded as 0" is.
+Before writing anything, produce a **breaking-point table** and put it in the
+report:
+
+| Expression (file:line) | Breaks at | Expected value | Actual value | Result |
+|---|---|---|---|---|
+| `shares = amt * total / assets` (Vault.sol:88) | `amt < assets/total` = `amt < 1e18` after a 1e18 donation | 1e18-1 wei → ~1 share | **0 shares** | depositor's 1e18 wei is credited to existing holders |
+| `uint128(amount)` (Pool.sol:142) | `amount ≥ 2^128` = 3.4e38 | 3.4e38 recorded | `amount - 2^128` ≈ **0** | balance destroyed, or minted if the wrap lands on a credit |
+| `fee = amt * 30 / 10000` (Router.sol:60) | `amt ≤ 333` | 0.999 (rounds to 0) | **0** | fee-free swaps at any size, repeated |
+
+Three columns carry the finding, and none of them may be prose:
+
+- **Breaks at** — solve for the input. Not "a large value": the number, and the
+  unit it is in (wei, 6-decimal units, seconds, array elements).
+- **Expected value** — what the arithmetic *should* produce at that input, by
+  the contract's own stated intent.
+- **Actual value** — what it produces. Compute it; do not describe it.
+
+Then answer the reachability question, because it sets severity:
+
+1. **Can any user reach the number?** Directly (they pass the argument), or by
+   accumulation (a monotonic counter arrives there after N operations — say
+   what N and how long that takes).
+2. **Can an attacker put *someone else* past it?** Donating tokens, front-running
+   the first deposit, spamming an array someone else must loop over. This is the
+   difference between "a whale would break it" (Low) and "anyone can break it
+   for a whale" (Critical).
+3. **Is the state after the break recoverable?** Wrong-but-continuing is theft;
+   permanent revert is a freeze — both are in `## Severity guidance` below.
+
+**If the number is reachable, it is a real exploit — say so in exactly those
+words and prove it.** A reachable breaking point gets a Critical/High severity,
+a Foundry PoC whose output shows the expected value and the actual value side by
+side, and an impact line naming the money: *"attacker deposits 1 wei, donates
+1e18, the next depositor's 9.9e17 wei mints 0 shares and is withdrawable by the
+attacker — expected 9.9e17 shares, actual 0."* If it is **not** reachable, say
+which precondition blocks it (a `require` upstream, a supply cap, a trusted
+role) and file it Informational with that precondition named — never drop it
+silently, and never leave it at "theoretically possible".
+
+### The numbers that recur
+
+Check each against this code; the value in the middle column is the one to
+compute for *this* contract, not to copy.
+
+| Class | The number | What happens past it |
+|---|---|---|
+| Rounding to zero | any `a * b / c` returns 0 while `a * b < c` | free action or lost credit — decide which side of the trade rounds down, and file it |
+| First-depositor / donation inflation | after a donation of `D`, any deposit `< D` mints **0** shares (no virtual shares/offset) | second depositor's principal goes to the attacker — ERC-4626, `custody.md` |
+| `MINIMUM_LIQUIDITY` | 1000 in Uniswap V2 | a fork that removed or lowered it re-opens the inflation attack it exists to price out |
+| Fee in bps | `amt < 10000 / feeBps` pays 0 (30 bps → `amt ≤ 333`) | fee evasion by splitting; also check the admin's max `feeBps` — an uncapped setter reaching 10000 is 100% seizure |
+| Decimal mismatch | 1e12 between a 6- and an 18-decimal token | `minDeposit = 1e18` is $1e12 of USDC; a price path off by 1e12 is a 1,000,000,000,000x mispricing |
+| `uint32` timestamp | 4,294,967,295 → **2106-02-07** | comparisons invert; a lock "until" wraps to the past |
+| Packed accumulator | `uint128` max 3.4e38 vs `accPerShare += reward * 1e12 / totalStaked` with `totalStaked = 1` | one update at `reward > 3.4e26` overflows the packed field → every subsequent interaction reverts |
+| Loop bound | ~30M block gas ÷ per-iteration cost: ~1,500 iterations at a cold 20k-gas SSTORE body, ~6,000 at a warm 5k body | the function is permanently uncallable past that length — `gas.md` |
+| Oracle | Chainlink `answer <= 0`, or `updatedAt` older than the feed's heartbeat | a 0 price divides by zero (freeze) or values collateral at nothing (liquidation of everyone) |
+| Slippage | `minOut = 0`, `deadline = block.timestamp` | neither is a bound; sandwich profit is capped only by pool depth |
+| Percentage base | 100 vs 10,000 vs 1e18 in the same file | a 100x or 1e14x error in whichever direction the mixed base points |
+
+---
+
 ## 1. Type-range audit (do this mechanically)
 
 Build a table: every state variable and struct field, its type, its maximum

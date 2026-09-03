@@ -301,6 +301,13 @@ Seven passes are mandatory whatever the contract type:
    0.8), every denominator's minimum value, every monotonic accumulator against
    its type max over the contract's lifetime, rounding direction on every shares
    path, intermediates that overflow before a division.
+   Output the **breaking-point table** from `arithmetic.md` §0 — for each
+   expression: the exact input it breaks at, the **expected value** there, the
+   **actual value**, and the result. Solve for the number; "could overflow" is
+   not a finding. Then say for each row whether a user or an attacker can reach
+   that input: if they can, it is a real exploit — file it Critical/High with a
+   PoC — and if they cannot, name the precondition that blocks it and file it
+   Informational. The table goes in the report as a `sections` entry.
 2. **Liveness** — can any function users *need* be made to revert forever?
    Answer the seven positive checks at the end of `arithmetic.md` explicitly in
    the report. A permanent freeze is Critical, same as theft.
@@ -382,6 +389,11 @@ title, severity, status (`Open` by default), precise `location`
 (`File.sol:120-135`), **description** (the mechanism), **impact** (what an
 attacker gains / users lose), and **recommendation** (a specific code-level fix,
 never "add checks").
+
+**Any finding with a number in it states expected vs actual.** Give the
+breaking input, then in `impact` the two values at that input — *expected
+9.9e17 shares, actual 0* — and the money that moves because of the gap. A PoC's
+`output` should show both values, not just a failing assertion.
 
 **Show the code both ways.** `code` renders as a red *Vulnerable code* block and
 `fix` as a green *Recommended fix* block. Inside either, prefix a line with `-`
