@@ -158,7 +158,7 @@ privilege required — the full rubric is in
 | AMM, routers, aggregators | [`swap.md`](skills/smartcontract-audit/references/swap.md) | slippage/deadline, `k` invariant, V3 callback auth, MEV |
 | LP accounting, zaps, V3 managers | [`liquidity.md`](skills/smartcontract-audit/references/liquidity.md) | first-depositor inflation, share rounding, LP pricing |
 | Wallets, 4337/7702, timelocks | [`wallet.md`](skills/smartcontract-audit/references/wallet.md) | signature replay, threshold bypass, delegatecall, recovery |
-| Deposit/withdraw, escrow, wrapped tokens | [`custody.md`](skills/smartcontract-audit/references/custody.md) | operator-cannot-withdraw rule, solvency invariant, escrow state machine, the no-mint rule for 1:1 wrappers |
+| Deposit/withdraw, escrow, wrapped tokens | [`custody.md`](skills/smartcontract-audit/references/custody.md) | operator-cannot-withdraw rule, solvency invariant, the **transfer table** (every value-moving line: `from`, `to`, who authorized it, requested vs moved vs credited), escrow state machine, the no-mint rule for 1:1 wrappers |
 | Launchpad, governance, airdrop, marketplace | [`misc.md`](skills/smartcontract-audit/references/misc.md) | refund paths, flash-loan voting, merkle leaves, auction griefing |
 | Anything that distributes value | [`economics.md`](skills/smartcontract-audit/references/economics.md) | value map, admin levers, unreachable liquidity, sequenced remediation |
 | **Every audit** | [`arithmetic.md`](skills/smartcontract-audit/references/arithmetic.md) | the **breaking point** of every expression — the exact input, the expected value, the actual value — plus overflow, truncation, precision **and contract bricking** |
@@ -275,7 +275,8 @@ skills/smartcontract-audit/
     staking.md  token.md  lending.md  defi.md
     swap.md  liquidity.md  wallet.md  misc.md
     economics.md                value map, admin levers, unreachable liquidity
-    custody.md                  deposit/withdraw, escrow, wrapped receipts
+    custody.md                  deposit/withdraw, the per-transfer-line table,
+                                escrow, wrapped receipts
     kub.md                      KAP standards, KUB chain notes
     postmortems.md              checks derived from real 2024-2026 exploits
     onchain.md                  cast cookbook for deployed contracts

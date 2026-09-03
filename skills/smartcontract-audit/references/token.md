@@ -14,6 +14,9 @@ KAP-20 / KAP-721 / KAP-1155 / KAP-22 equivalents (see `kub.md`).
   compare code to the tokenomics the project publishes; a mismatch is a finding.
 
 ### Transfer hooks / fee-on-transfer
+
+`_transfer` / `_update` **is** this token's custody path — run `custody.md` §3b
+against it line by line, the `from == to` self-transfer case included.
 - Tax/fee logic in `_transfer` (`_update` in OZ v5) that:
   - can be raised to 100% by the owner after launch (honeypot — Critical),
   - has no upper bound (`require(fee <= MAX_FEE)` missing),

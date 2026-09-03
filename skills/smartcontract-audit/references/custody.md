@@ -145,6 +145,62 @@ test the team can add.
 - **Accounting written before the transfer succeeds**, with an unchecked return
   value on a non-standard token — use `SafeERC20`.
 
+## 3b. Every value-moving line, mechanically
+
+Deposit and transfer paths are the only lines that actually move value, so a bug
+here is Critical by default — theft or insolvency, not inconvenience. Prose
+checks get nodded at; this one is a table. **One row per** `transfer` /
+`transferFrom` / `safeTransfer*` / `call{value:}` / `_transfer` / `_update` /
+`_mint` / `_burn` in scope. No exceptions, including the ones that look
+obviously fine.
+
+| Line | Asset | `from` | `to` | Who authorized `from`? | Requested | Actually moved | Credited |
+|---|---|---|---|---|---|---|---|
+| Vault.sol:71 | `depositToken` | `msg.sender` | `address(this)` | the caller | `amt` | `amt - fee` | **`amt`** ← mismatch |
+
+Then answer these five against the filled table. Each one is a Critical that has
+shipped in real contracts, and each is invisible unless you read the line's
+arguments rather than its name.
+
+1. **Is any `from` caller-supplied?**
+   `token.transferFrom(from, address(this), amt)` where `from` comes from
+   calldata spends **any** approval this contract holds. One transaction drains
+   every user who ever approved it. The only acceptable `from` is `msg.sender`,
+   or an address whose consent is proven in the same transaction — a signature,
+   an EIP-2612 `permit`, or an escrow record written by that address earlier.
+   "Only the operator calls it with the right value" is not a control.
+2. **Is `to` caller-supplied on a paying path?** Paying to an arbitrary address
+   is fine *only* when the debit is `msg.sender`'s own balance. A function that
+   debits one address and credits another, both from calldata, is the same bug
+   as (1) wearing different clothes.
+3. **Does credited equal moved?** The row's last two columns must match. If they
+   cannot (fee-on-transfer, rebasing, a token with a transfer hook), measure the
+   delta or reject the asset — §2 has the mechanics and the solvency invariant
+   this breaks.
+4. **Can `from == to`?** The self-transfer that mints:
+
+   ```solidity
+   uint256 f = bal[from];
+   uint256 t = bal[to];          // cached BEFORE the debit
+   bal[from] = f - amt;
+   bal[to]   = t + amt;          // from == to: balance ends at f + amt
+   ```
+
+   Sending to yourself creates `amt` out of nothing. It survives review because
+   each line is correct on its own — only the pair is wrong. Check every place
+   two balances are read before either is written. OZ's `_update` is safe; a
+   hand-rolled `_transfer` or a fork that inlined one is where this lives.
+5. **Is the asset address caller-supplied?** `deposit(address token, uint amt)`
+   lets an attacker deposit a token they mint for free and withdraw a real one;
+   `sweep(address token)` whose allowlist does not *exclude* the user-owned
+   asset is the operator draining custody through the front door (§1).
+
+Any row that fails gets the `arithmetic.md` §0 treatment — the exact input, the
+expected movement, the actual movement — and is filed Critical or High with a
+PoC. A failing row is never an observation.
+
+---
+
 ## 4. Withdraw
 
 - **Effects before interactions**: decrement the balance, then send. The reverse
@@ -306,6 +362,9 @@ check it does not snapshot the balance.
 2. State the solvency invariant and say where the code enforces it.
 3. For deposit and withdraw: does custody change by exactly the accounted
    amount, **measured** rather than assumed?
+3b. Fill the §3b table — one row per value-moving line. No row may have a
+   caller-supplied `from` or asset address, no row may credit more than it
+   measured, and no balance pair may be read before either is written.
 4. Can any privileged role move user balances, edit the ledger, pause the exit,
    set an unbounded fee, or upgrade the contract? Name the address and the loss
    for each — and put the answer in the executive summary.

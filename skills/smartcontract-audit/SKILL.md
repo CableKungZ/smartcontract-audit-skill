@@ -321,6 +321,14 @@ Seven passes are mandatory whatever the contract type:
    operator must not be able to move a user's balance under **any**
    circumstance; a supply-increasing path must take custody in the same
    transaction. Put the conclusion in the executive summary as a sentence.
+   Fill the **§3b transfer table** — one row per `transfer`/`transferFrom`/
+   `call{value:}`/`_transfer`/`_mint`/`_burn` in scope, with its `from`, `to`,
+   who authorized the `from`, and the requested / moved / credited amounts — and
+   put it in the report as a `sections` entry. It is mandatory for any contract
+   with a deposit path and for every token contract, whose `_transfer` is its own
+   custody. A caller-supplied `from` or asset address, a credited amount above
+   the measured one, or a balance pair read before either is written is a
+   Critical or High with a PoC, never an observation.
 6. **Incident replay** (`postmortems.md`) — walk each numbered class against
    this code. Two of them apply to almost every contract: the paired-rounding
    check (does splitting an operation into N smaller ones ever yield more than
