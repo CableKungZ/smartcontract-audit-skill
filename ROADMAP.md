@@ -20,5 +20,6 @@ history (`git log`, commits `54d2821` and `6eb1785`).
 - Every script change extends `_selftest()` in the same file.
 - Run `python skills/smartcontract-audit/scripts/linkcheck.py .` before shipping
   anything that adds a URL.
+- Plan mode before any new requirement — see `CLAUDE.md`.
 - The workflow is described **once**, in `SKILL.md`. `commands/audit.md` points
   at it and adds nothing but path resolution and argument handling.
