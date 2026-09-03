@@ -84,13 +84,34 @@ python $S/scripts/scan.py contracts/
 slither contracts/ --json slither.json
 python $S/scripts/slither_to_findings.py slither.json > draft.findings.json
 
-# 3. Audit (in Claude Code) -- add `quick` for cheap triage instead
+# 3. Audit (in Claude Code) -- no argument works too, it finds the contracts
 /audit contracts/Staking.sol
 
 # 4. Report
 python $S/report/gen_report.py --validate findings.json   # fix every warning
 python $S/report/gen_report.py findings.json report.html
 ```
+
+## Modes
+
+Asked once, before the scan. Whatever you decline is recorded in the report's
+Scope as **not performed**.
+
+| Mode | What it is |
+|---|---|
+| **Hard** (default) | the audit: every catalog, seven mandatory passes, every file read end to end, a runnable PoC on each Critical/High, `findings.json` → HTML |
+| **Quick** | triage, ~⅓ the cost: `scan.py` output plus the lines it flags, terminal list only. May raise an alarm, may never clear one — it is labelled "not an audit" and says so verbatim at the end |
+| **Reaudit** | pass a previous `findings.json`: each old finding gets `Fixed` / `Open` / `Acknowledged` at code level, then full Hard passes over the changed code (fixes introduce bugs — see Uranium in `examples.md`). Renders a remediation-status table via `--previous` |
+
+**Parallel execution** is a scheduling detail of Hard, and the skill decides it
+itself after recon — parallel above ~600 in-scope lines, >3 files, or ≥3
+catalogs; serial below that, and serial for one tightly coupled contract or a
+small reaudit. The split is **by pass, not by file**: five subagents (arithmetic
++ liveness / loops + centralization / custody + value accounting / incident
+replay / type catalogs), each reading the whole contract, so nothing cross-file
+falls between them. Merging, dedup, the cross-cutting pass, PoCs, self-review
+and the report all stay in the main context. `parallel` / `serial` as an
+argument forces it.
 
 ## The report
 
