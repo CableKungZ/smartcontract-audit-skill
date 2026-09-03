@@ -390,6 +390,16 @@ title, severity, status (`Open` by default), precise `location`
 attacker gains / users lose), and **recommendation** (a specific code-level fix,
 never "add checks").
 
+**The recommendation is chosen, not improvised.** Before writing it, run
+`gas.md` §3b: sketch three fixes — a guard, restructured math, a new mechanism —
+and ship the cheapest one that *fully* removes the bug, never loops over
+anything a user can grow, and keeps the flexibility the contract already had.
+Name the runner-up and why it lost in one sentence. Reject the over-engineered
+fix explicitly: no new role, module, config or upgrade path for something a
+`require` closes, no oracle/timelock/pausability introduced by the fix, no
+rewrite in answer to a Low. If the cheapest correct fix is deleting the
+function, recommend that.
+
 **Any finding with a number in it states expected vs actual.** Give the
 breaking input, then in `impact` the two values at that input — *expected
 9.9e17 shares, actual 0* — and the money that moves because of the gap. A PoC's

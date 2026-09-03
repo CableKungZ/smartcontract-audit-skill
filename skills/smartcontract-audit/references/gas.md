@@ -140,6 +140,89 @@ reduce clarity or safety — a bug introduced by a gas tweak is not a saving.
 
 ---
 
+## 3b. Choosing the fix — three options, ship the cheapest that holds
+
+A recommendation is a design decision made on the client's behalf, so do not
+make it by reflex. For every Critical / High / Medium finding, sketch **three**
+fixes before writing one down, then pick with the rule below. Cost the loser
+options in one line each; ship one.
+
+Sketch them at three different points on the spectrum, cheapest first:
+
+1. **A guard.** One `require`, a reordering, a different rounding direction, a
+   constant changed. No new state. Often free.
+2. **Restructured math or state.** Same storage layout, different accounting —
+   a checkpoint instead of a scan, snapshotting a parameter, `mulDiv` instead of
+   `a * b / c`.
+3. **A new mechanism.** New storage, a new pattern (pull-payment, merkle claim,
+   accumulator, two-step transfer), or a library.
+
+Score each on five columns and put the table in your working notes:
+
+| Option | Gas on the hot path | New storage | Removes the bug or narrows it? | New attack surface | Lines to review |
+
+**The rule, in order:**
+
+1. **Fully removes the bug** — an option that only narrows it is not a fix and
+   does not compete. Cheapness never buys a partial fix.
+2. **No loop over anything a user can grow.** A fix that iterates is a new
+   finding in this file. O(1) alternatives, in the order you should reach for
+   them: an accumulator / checkpoint (`accRewardPerShare` style), pull instead
+   of push, a mapping instead of an array scan, a merkle root instead of an
+   on-chain list, an off-chain index with an on-chain proof.
+3. **Cheapest of what is left**, priced with the table below — count the hot
+   path (the function users call most), not the deploy cost.
+4. **Ties break on fewest storage slots, then fewest lines.**
+5. **Keeps the flexibility the contract already has.** A fix that hard-codes a
+   value the owner legitimately needs to tune has cost the protocol something;
+   say so and pick again.
+
+**Do not over-engineer the fix.** These are rejections, not preferences:
+
+- No new role, module, interface, config struct, or upgrade path for a bug that
+  a `require` or a reordering closes.
+- No oracle, no timelock, no pausability introduced *by the fix* — each is its
+  own centralization finding, and you would be trading a Medium for a High.
+- No library dependency for arithmetic the compiler already checks. `mulDiv` and
+  `SafeCast` earn their place; a `SafeMath` import in ≥0.8 does not.
+- Do not answer a Low with a rewrite. Match the fix's size to the severity.
+- If the honest fix is "delete this function", say that. It is usually the
+  cheapest option and it is almost never the one a client is offered.
+
+**Prices to compute with** (mainnet, post-Shanghai; L2s invert this — calldata
+dominates, storage matters less):
+
+| Operation | Gas |
+|---|---|
+| `SSTORE` zero → non-zero | 20,000 |
+| `SSTORE` non-zero → non-zero | 2,900 |
+| `SSTORE` non-zero → zero | 2,900, refund 4,800 |
+| `SLOAD` cold / warm | 2,100 / 100 |
+| `TSTORE` / `TLOAD` (EIP-1153) | 100 / 100 |
+| External call, cold / warm target | 2,600 / 100 |
+| `keccak256` | 30 + 6 per word |
+| Calldata byte, non-zero / zero | 16 / 4 |
+| `require` with a short string | ~24 when it passes |
+| Memory expansion | quadratic past ~700 words — the reason "just build an array" is not free |
+
+Worked example — a reentrancy in `withdraw()`:
+
+- **(1) Reorder to checks-effects-interactions** — zero gas, removes the bug
+  entirely. **Ships.**
+- **(2) `nonReentrant`** — 20,000 + 2,900 with a storage lock, ~200 with a
+  transient-storage lock on a chain that has EIP-1153. Correct, but it pays for
+  a guard that ordering already provides. One line: *"also correct, costs ~2.9k
+  per call and does not remove the ordering bug it hides."*
+- **(3) Pull-payment withdrawal queue** — a new mapping, a new function, a new
+  griefing surface. One line: *"warranted only if the callee must be untrusted
+  and re-entry is expected by design."*
+
+Report the winner as the recommendation, and name the runner-up in one sentence
+so the client can see the trade was considered — not three options for them to
+choose between. Choosing is the audit's job.
+
+---
+
 ## 4. What to put in the report
 
 - A **Gas & Loop analysis** section listing every loop with: location, who
@@ -150,6 +233,9 @@ reduce clarity or safety — a bug introduced by a gas tweak is not a saving.
   (location → change → approximate saving), not one finding per tweak.
 - If the project has no gas benchmarks, recommend `forge snapshot` /
   `forge test --gas-report` in CI so regressions surface.
+- For every Critical/High/Medium recommendation, the §3b winner **and** the
+  one-line reason the runner-up lost. A recommendation with no alternative
+  considered is a guess.
 
 ## Reference incidents
 

@@ -162,7 +162,7 @@ privilege required — the full rubric is in
 | Launchpad, governance, airdrop, marketplace | [`misc.md`](skills/smartcontract-audit/references/misc.md) | refund paths, flash-loan voting, merkle leaves, auction griefing |
 | Anything that distributes value | [`economics.md`](skills/smartcontract-audit/references/economics.md) | value map, admin levers, unreachable liquidity, sequenced remediation |
 | **Every audit** | [`arithmetic.md`](skills/smartcontract-audit/references/arithmetic.md) | the **breaking point** of every expression — the exact input, the expected value, the actual value — plus overflow, truncation, precision **and contract bricking** |
-| **Every audit** | [`gas.md`](skills/smartcontract-audit/references/gas.md) | unbounded loops, gas griefing, optimization |
+| **Every audit** | [`gas.md`](skills/smartcontract-audit/references/gas.md) | unbounded loops, gas griefing, optimization, and the **three-option fix pass** — sketch a guard / a restructure / a new mechanism, ship the cheapest that fully removes the bug without looping or over-engineering |
 | **Every audit** | [`methodology.md`](skills/smartcontract-audit/references/methodology.md) | severity rubric, general EVM catalog, self-review pass, per-chain notes |
 | **Every audit** | [`postmortems.md`](skills/smartcontract-audit/references/postmortems.md) | checks derived from real 2024-2026 exploits: paired-rounding, wrong overflow checks, donation on fresh markets, cross-chain verifier config, uninitialized proxies, EIP-7702 |
 | Already deployed | [`onchain.md`](skills/smartcontract-audit/references/onchain.md) | `cast` cookbook: bytecode vs source, real proxy impl/admin, real role holders, configured params, messaging config |
@@ -270,7 +270,8 @@ skills/smartcontract-audit/
     methodology.md              severity rubric, EVM catalog, per-chain notes
     arithmetic.md               breaking-point table (expected vs actual at the
                                 exact input), overflow, casts, precision, bricking
-    gas.md                      loops, gas griefing, optimization
+    gas.md                      loops, gas griefing, optimization, choosing
+                                the cheapest fix that still holds
     staking.md  token.md  lending.md  defi.md
     swap.md  liquidity.md  wallet.md  misc.md
     economics.md                value map, admin levers, unreachable liquidity
