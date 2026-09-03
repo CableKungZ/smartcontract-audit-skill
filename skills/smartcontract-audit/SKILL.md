@@ -13,7 +13,8 @@ description: >
   WETH or KKUB where no mint path may exist besides depositing the underlying),
   mandatory arithmetic/overflow/liveness, loop & gas, and custody passes, an
   incident-replay pass derived from real 2024-2026 exploits, Quick / Hard /
-  Reaudit modes, a runnable-PoC requirement on every Critical and High, checks of
+  Reaudit modes with an optional parallel mode that fans the passes out to
+  concurrent subagents, a runnable-PoC requirement on every Critical and High, checks of
   the pinned OpenZeppelin and solc versions against known advisories, an
   on-chain state pass for deployed contracts, reference
   implementations to diff forks against, and chain-specific notes including
@@ -68,6 +69,84 @@ Everything below this section describes **Hard**. In Quick, skip step 2, run
 step 3's passes only against the lines `scan.py` flagged, and stop after a
 terminal list — no `findings.json`, no HTML.
 
+## Parallel mode (Hard, faster)
+
+Hard mode serially walks seven passes plus the type catalogs over the same code.
+That is the slow part, and the passes do not depend on each other — so run them
+as concurrent subagents. Same coverage, same catalogs, wall-clock roughly the
+length of the slowest pass.
+
+**Decide this yourself — do not ask.** The deliverable and the rules are
+identical either way, so it is a scheduling call, not the user's call, and you
+have the numbers to make it after step 0. `scan.py`'s header line
+(`N file(s), M lines`) plus the catalogs step 1 selected give you all three
+inputs:
+
+Go parallel when **any** of these holds:
+- more than ~600 in-scope lines, or
+- more than 3 in-scope files, or
+- step 1 selected 3 or more catalogs (a farm that is staking + token + KUB, say).
+
+Stay serial otherwise — under those thresholds one context walks the passes
+faster than five agents can be briefed, and the fragments cost more to merge
+than the passes cost to run. Also stay serial, whatever the size, when the
+contract is one tightly coupled unit whose passes keep referring to each other
+(a single AMM core where the rounding, the loop and the fee split are the same
+twenty lines), or in Reaudit where the changed surface is small.
+
+Say the call in one line before dispatching — "1,400 lines across 6 files,
+4 catalogs → running the passes in parallel" — so the user can override it.
+`/audit … parallel` or `… serial` forces the choice and skips the rule.
+
+Steps 0, 1 and 2 stay in the main context — recon, type inference and reading
+the contract end to end are what let you judge the fragments that come back.
+Then dispatch these agents **in one message** (`general-purpose`), each with the
+prompt template below:
+
+| Agent | Passes | Loads |
+|---|---|---|
+| `arith` | 1 Arithmetic, 2 Liveness | `arithmetic.md` |
+| `gas` | 3 Loops & gas, 4 Centralization | `gas.md`, `methodology.md` |
+| `custody` | 5 Custody, 7 Value accounting | `custody.md`, `economics.md` |
+| `replay` | 6 Incident replay, library/solc advisories | `postmortems.md`, `examples.md` |
+| `type` | the type-catalog walk (step 3's checklist) | every catalog step 1 selected, plus `kub.md` / `onchain.md` if they apply |
+
+Two type catalogs with little overlap (staking + token) split into two `type`
+agents; more than that and you are paying dispatch overhead for nothing. Five to
+six agents is the ceiling.
+
+Prompt each with:
+
+> You are running the **<name>** pass of a smart contract audit. Read
+> `SKILL_DIR/references/<catalogs>` and every in-scope file end to end:
+> `<paths>`. Walk your catalog as a checklist — for each item, is it reachable
+> in *this* code? A finding needs a concrete failure scenario with numbers
+> (inputs -> wrong state / loss); if you cannot write one it is Informational or
+> not a finding. Do not pad, do not fix anything, do not write a report.
+> Context you do not have to re-derive: <paste the roles table, value-flow path
+> and external-call inventory from step 2>.
+> Write `<scratch>/<name>.findings.json` — a JSON array of finding objects in
+> the shape at the top of `report/gen_report.py`, with `id` prefixed `<name>-`.
+> Leave `poc` empty. Reply with one line per finding: id, severity, location.
+
+**The main context owns everything after that**, and this is not optional:
+
+- **Merge and renumber.** Read every fragment. Deduplicate — two agents finding
+  the same bug from different angles is one finding with the better description.
+  Assign the real `C-01` / `H-02` ids only here.
+- **The cross-cutting pass.** Ask what no single agent could see: does a Medium
+  from `arith` become Critical given a `gas` unbounded loop, or a `custody`
+  withdrawal path? This pass is the price of splitting; skip it and Parallel
+  mode is worse than serial.
+- **Severity, PoCs, self-review, the report** — steps 4, 5 and 6 unchanged. A
+  subagent's severity is a proposal, not a verdict.
+- **Say so in the report's method section**: run in parallel, which passes went
+  to which agent, and that dedup and cross-cutting synthesis were done in the
+  main context.
+
+Quick mode does not parallelize — it is already cheap, and dispatch overhead
+would eat the saving.
+
 ## Run conditions — do not audit below these
 
 This skill sets `model: opus` and `effort: high` in its frontmatter so every run
@@ -87,10 +166,10 @@ being labelled as triage — it does not get to relax the labelling.
   allowlist can exclude a model, in which case the session keeps its own — say
   so in the report's method section rather than silently producing a thinner
   audit. The reader needs to know what produced it.
-- **Never run the audit in a subagent** unless the user asks. The catalogs plus
-  the contract need to sit in one context; splitting them is how cross-cutting
-  findings (a rounding bug that only matters because of an unbounded loop) get
-  lost between agents.
+- **Do not fan out below the pass level.** Splitting a *file* across agents is
+  how cross-cutting findings (a rounding bug that only matters because of an
+  unbounded loop) get lost. Splitting the *passes*, each agent reading the whole
+  contract, does not — that is Parallel mode below.
 - **Do not sample.** Read every in-scope file end to end. "Reviewed the main
   contract" is not an audit, and partial coverage must be stated in Scope.
 - **Record what produced the report.** Put the model, effort level, tool
@@ -330,5 +409,5 @@ references/   methodology, arithmetic+liveness, gas+loops, per-type catalogs,
               OpenZeppelin known-vulnerable-version table)
 report/       gen_report.py (JSON -> HTML + validator), example.findings.json
 scripts/      scan.py (recon), slither_to_findings.py (import)
-.claude/      /audit and /audit-report slash commands
+commands/     /audit and /audit-report slash commands
 ```
